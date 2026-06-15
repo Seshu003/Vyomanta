@@ -91,10 +91,12 @@ EOF
         
         bench new-site lms.render \
           --db-name "$DB_NAME" \
-          --mariadb-root-username "$DB_USER" \
-          --mariadb-root-password "$DB_PASSWORD" \
+          --db-user "$DB_USER" \
+          --db-password "$DB_PASSWORD" \
+          --db-host "$DB_HOST" \
+          --db-port "$DB_PORT" \
+          --no-setup-db \
           --admin-password "${ADMIN_PASSWORD:-admin}" \
-          --no-mariadb-socket \
           --force
         
         bench --site lms.render install-app payments
