@@ -85,10 +85,10 @@ cat <<EOF > sites/lms.render/site_config.json
 }
 EOF
 
-# Check if the database has tables and is fully initialized
+# Check if the database has tables and is fully initialized (checks for LMS Course table from the lms app)
 echo "Checking database initialization state..."
-if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/etc/ssl/certs/ca-certificates.crt -e "USE $DB_NAME; SHOW TABLES;" 2>/dev/null | grep -q "tabPatch Log"; then
-    echo "Database is empty, uninitialized, or partially initialized. Executing bench new-site with --no-setup-db..."
+if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/etc/ssl/certs/ca-certificates.crt -e "USE $DB_NAME; SHOW TABLES;" 2>/dev/null | grep -qi "lms course"; then
+    echo "Database is incomplete or uninitialized. Executing bench new-site with --no-setup-db..."
     
     # Initialize site tables and default users in the pre-existing database
     bench new-site lms.render \
