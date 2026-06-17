@@ -16,12 +16,33 @@ echo "Local Redis is up and running."
 
 cd /home/frappe/frappe-bench
 
+# Add db_ssl_ca configuration to common_site_config.json so all connections use TLS
+if [ -f "sites/common_site_config.json" ]; then
+    python3 -c "
+import json
+path = 'sites/common_site_config.json'
+with open(path, 'r') as f:
+    config = json.load(f)
+config['db_ssl_ca'] = '/etc/ssl/certs/ca-certificates.crt'
+with open(path, 'w') as f:
+    json.dump(config, f, indent=4)
+"
+fi
+
+# Apply environment configurations dynamically
+bench set-mariadb-host "$DB_HOST"
+bench set-config -g db_port "$DB_PORT"
+bench set-config -g allow_cors "$FRONTEND_URL"
+bench set-config -g ignore_csrf 1
+
 # Ensure site config and logs directories exist
 mkdir -p sites/lms.render/logs
 
 # Write/verify site_config.json configuration so the web server can connect to the DB
 cat <<EOF > sites/lms.render/site_config.json
 {
+ "db_host": "$DB_HOST",
+ "db_port": $DB_PORT,
  "db_name": "$DB_NAME",
  "db_password": "$DB_PASSWORD",
  "db_type": "mariadb",

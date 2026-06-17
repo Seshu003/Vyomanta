@@ -73,6 +73,8 @@ mkdir -p sites/lms.render/logs
 # Write the site config pointing to the external DB
 cat <<EOF > sites/lms.render/site_config.json
 {
+ "db_host": "$DB_HOST",
+ "db_port": $DB_PORT,
  "db_name": "$DB_NAME",
  "db_password": "$DB_PASSWORD",
  "db_type": "mariadb",
