@@ -664,32 +664,23 @@ export async function saveCourseSyllabus(courseId, syllabus) {
 export async function login(email, password) {
   const normalizedEmail = email.trim().toLowerCase();
 
-  // Support 5 student accounts + generic student locally without hitting the backend
-  if (normalizedEmail === 'student@lms.com' && password === 'student123') {
-    return { email: normalizedEmail, username: normalizedEmail, name: 'Student', role: 'Student' };
-  }
-
-  const studentMatch = normalizedEmail.match(/^student([1-5])@lms\.com$/);
-  if (studentMatch && password === 'student123') {
-    const idx = parseInt(studentMatch[1], 10);
-    const studentNames = [
-      'Aarav Mehta',
-      'Sneha Patel',
-      'Rohan Sharma',
-      'Priya Nair',
-      'Aditya Rao'
-    ];
-    return {
-      email: normalizedEmail,
-      username: normalizedEmail,
-      name: studentNames[idx - 1],
-      role: 'Student'
-    };
-  }
-
   if (!FRAPPE_URL) {
     if (normalizedEmail === 'admin@lms.com' && password === 'admin123') {
       return { email: normalizedEmail, username: 'Administrator', name: 'Administrator', role: 'Administrator' };
+    }
+    if (normalizedEmail === 'student@lms.com' && password === 'student123') {
+      return { email: normalizedEmail, username: normalizedEmail, name: 'Student', role: 'Student' };
+    }
+    const studentMatch = normalizedEmail.match(/^student([1-5])@lms\.com$/);
+    if (studentMatch && password === 'student123') {
+      const idx = parseInt(studentMatch[1], 10);
+      const studentNames = ['Aarav Mehta', 'Sneha Patel', 'Rohan Sharma', 'Priya Nair', 'Aditya Rao'];
+      return {
+        email: normalizedEmail,
+        username: normalizedEmail,
+        name: studentNames[idx - 1],
+        role: 'Student'
+      };
     }
     throw new Error("Invalid credentials");
   }
@@ -722,13 +713,27 @@ export async function login(email, password) {
       throw new Error(data.message || "Invalid credentials");
     }
   } catch (err) {
-    // If the backend request fails (e.g. connection refused), fall back to local credentials for admin
+    // If the backend request fails (e.g. connection refused), fall back to local credentials
     if (normalizedEmail === 'admin@lms.com' && password === 'admin123') {
       return {
         email: normalizedEmail,
         username: 'Administrator',
         name: 'Administrator',
         role: 'Administrator'
+      };
+    }
+    if (normalizedEmail === 'student@lms.com' && password === 'student123') {
+      return { email: normalizedEmail, username: normalizedEmail, name: 'Student', role: 'Student' };
+    }
+    const studentMatch = normalizedEmail.match(/^student([1-5])@lms\.com$/);
+    if (studentMatch && password === 'student123') {
+      const idx = parseInt(studentMatch[1], 10);
+      const studentNames = ['Aarav Mehta', 'Sneha Patel', 'Rohan Sharma', 'Priya Nair', 'Aditya Rao'];
+      return {
+        email: normalizedEmail,
+        username: normalizedEmail,
+        name: studentNames[idx - 1],
+        role: 'Student'
       };
     }
     throw err;
@@ -1705,27 +1710,8 @@ const DEFAULT_NOTIFICATIONS = [
 ];
 
 export async function getNotifications() {
-  if (FRAPPE_URL) {
-    try {
-      const alerts = await frappeRestGet("LMS Alert", {
-        fields: JSON.stringify(["name", "title", "message", "category", "read", "creation"]),
-        limit_page_length: 100
-      });
-      if (alerts && Array.isArray(alerts)) {
-        return alerts.map(a => ({
-          id: a.name,
-          title: a.title,
-          message: a.message,
-          category: a.category || "System",
-          read: !!a.read,
-          date: new Date(a.creation).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        }));
-      }
-    } catch (e) {
-      console.error("Failed to fetch notifications from Frappe REST API. Falling back.", e);
-    }
-  }
-
+  // LMS Alert is a mock DocType not present in standard Frappe LMS.
+  // We fall back directly to avoid console 404 network errors.
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('admin_notifications_list');
     if (saved) {
@@ -1738,15 +1724,6 @@ export async function getNotifications() {
 }
 
 export async function markNotificationRead(id) {
-  if (FRAPPE_URL) {
-    try {
-      await frappeRestPut("LMS Alert", id, { read: 1 });
-      return true;
-    } catch (e) {
-      console.error("Failed to mark alert as read on Frappe.", e);
-    }
-  }
-
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('admin_notifications_list') || JSON.stringify(DEFAULT_NOTIFICATIONS);
     const list = JSON.parse(saved);
@@ -1758,16 +1735,6 @@ export async function markNotificationRead(id) {
 }
 
 export async function clearAllNotifications() {
-  if (FRAPPE_URL) {
-    try {
-      const alerts = await getNotifications();
-      await Promise.all(alerts.map(a => frappeRestPut("LMS Alert", a.id, { read: 1 })));
-      return true;
-    } catch (e) {
-      console.error("Failed to clear notifications on Frappe.", e);
-    }
-  }
-
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('admin_notifications_list') || JSON.stringify(DEFAULT_NOTIFICATIONS);
     const list = JSON.parse(saved);
@@ -1797,17 +1764,17 @@ export async function getCertificates() {
   if (FRAPPE_URL) {
     try {
       const certs = await frappeRestGet("LMS Certificate", {
-        fields: JSON.stringify(["name", "student_name", "course_title", "issue_date", "cert_hash", "status"]),
+        fields: JSON.stringify(["name", "member_name", "course_title", "issue_date", "published"]),
         limit_page_length: 100
       });
       if (certs && Array.isArray(certs)) {
         return certs.map(c => ({
           id: c.name,
-          student_name: c.student_name,
+          student_name: c.member_name || "Unknown Student",
           course_title: c.course_title,
-          issue_date: c.issue_date,
-          cert_hash: c.cert_hash,
-          status: c.status || "Active"
+          issue_date: c.issue_date ? new Date(c.issue_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "",
+          cert_hash: c.name,
+          status: c.published ? "Active" : "Draft"
         }));
       }
     } catch (e) {
@@ -1830,13 +1797,13 @@ export async function createCertificate(certData) {
   if (FRAPPE_URL) {
     try {
       const result = await frappeRestPost("LMS Certificate", {
-        student_name: certData.student_name,
+        member: certData.member_email || "admin@lms.com",
+        member_name: certData.student_name,
         course_title: certData.course_title,
-        issue_date: certData.issue_date || new Date().toISOString().split('T')[0],
-        cert_hash: certData.cert_hash || Math.random().toString(36).substr(2, 10),
-        status: "Active"
+        issue_date: certData.issue_date ? new Date(certData.issue_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        published: 1
       });
-      return { ...certData, id: result.name };
+      return { ...certData, id: result.name, cert_hash: result.name, status: "Active" };
     } catch (e) {
       console.error("Failed to create certificate via Frappe REST API. Falling back.", e);
       throw e;

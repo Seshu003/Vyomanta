@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils.password import update_password
 
 students = [
     {"email": "student@lms.com", "name": "Student"},
@@ -12,6 +13,7 @@ students = [
 for s in students:
     email = s["email"]
     name = s["name"]
+    
     if not frappe.db.exists("User", email):
         print(f"Creating user {email} ({name})...")
         first_name = name.split(" ")[0]
@@ -31,6 +33,10 @@ for s in students:
             user.add_roles("LMS Student")
     else:
         print(f"User {email} already exists.")
+
+    # Always set/update the password to ensure it matches 'student123'
+    print(f"Setting password for {email} to 'student123'...")
+    update_password(user=email, pwd="student123", logout_all_sessions=False)
 
 frappe.db.commit()
 print("Students bootstrap completed successfully!")
