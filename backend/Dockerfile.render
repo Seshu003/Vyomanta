@@ -25,6 +25,10 @@ RUN git clone https://github.com/frappe/lms.git apps/lms --depth 1 \
 # Configure apps registry file
 RUN printf "frappe\npayments\nlms\n" > sites/apps.txt
 
+# Copy and execute schema patching script to clean DocTypes at build time
+COPY --chown=frappe:frappe patch_schemas.py /home/frappe/frappe-bench/patch_schemas.py
+RUN python3 /home/frappe/frappe-bench/patch_schemas.py && rm /home/frappe/frappe-bench/patch_schemas.py
+
 # Remove Redis/Watch from Procfile so they don't spawn redundantly
 RUN sed -i '/redis/d' ./Procfile \
     && sed -i '/watch/d' ./Procfile
@@ -32,14 +36,15 @@ RUN sed -i '/redis/d' ./Procfile \
 # Build assets during the build phase (saves runtime CPU and RAM)
 RUN bench build
 
-# Copy startup orchestration script as root
+# Copy startup orchestration scripts as root
 USER root
-COPY --chown=frappe:frappe init-render.sh /home/frappe/init-render.sh
-RUN chmod +x /home/frappe/init-render.sh
+COPY --chown=frappe:frappe init-render-db.sh /home/frappe/init-render-db.sh
+COPY --chown=frappe:frappe init-render-web.sh /home/frappe/init-render-web.sh
+RUN chmod +x /home/frappe/init-render-db.sh /home/frappe/init-render-web.sh
 
 USER frappe
 WORKDIR /home/frappe
 EXPOSE 8000
 
 # Run startup script
-CMD ["/home/frappe/init-render.sh"]
+CMD ["/home/frappe/init-render-web.sh"]
