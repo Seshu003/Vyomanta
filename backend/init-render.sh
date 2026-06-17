@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Optimize memory usage for constrained environments (512MB RAM)
+export MALLOC_ARENA_MAX=2
+
 # Start local Redis server (used inside the container for caching & queues)
 echo "Starting local Redis server..."
 redis-server --daemonize yes
@@ -64,10 +67,12 @@ bench set-redis-cache-host redis://127.0.0.1:6379
 bench set-redis-queue-host redis://127.0.0.1:6379
 bench set-redis-socketio-host redis://127.0.0.1:6379
 
+# Ensure site logs directory exists (fixes FileNotFoundError for database.log)
+mkdir -p sites/lms.render/logs
+
 # Render runs on ephemeral filesystems. Recreate the site folder configuration if missing.
-if [ ! -d "sites/lms.render" ]; then
+if [ ! -f "sites/lms.render/site_config.json" ]; then
     echo "Site config folder for lms.render not found. Restoring configuration..."
-    mkdir -p sites/lms.render
     
     # Write the site config pointing to the external DB
     cat <<EOF > sites/lms.render/site_config.json
@@ -116,5 +121,6 @@ bench --site lms.render migrate
 sed -i "s/bench serve.*/bench serve --port ${PORT:-8000}/g" ./Procfile
 
 # Start the server (binds instantly to port 8000/dynamic port)
+# We serve only the web process directly to keep RAM within 512MB limit on free tier
 echo "Starting Frappe Bench web server..."
-bench start
+bench --site lms.render serve --port ${PORT:-8000}
