@@ -15,6 +15,7 @@ export default function ResourcesLibrary({ navigateTo }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [resources, setResources] = useState([]);
+  const [errorMsg, setErrorMsg] = useState(null);
   
   // Categories structure from database
   const [categories, setCategories] = useState([]);
@@ -33,14 +34,19 @@ export default function ResourcesLibrary({ navigateTo }) {
         const res = await fetch('/api/resources/categories');
         const data = await res.json();
         
-        // Extract unique lists
-        const cats = ['all', ...new Set(data.map(item => item.category))];
-        const subs = ['all', ...new Set(data.map(item => item.subcategory))];
-        
-        setCategories(cats);
-        setSubcategories(subs);
+        if (Array.isArray(data)) {
+          // Extract unique lists
+          const cats = ['all', ...new Set(data.map(item => item.category))];
+          const subs = ['all', ...new Set(data.map(item => item.subcategory))];
+          
+          setCategories(cats);
+          setSubcategories(subs);
+        } else {
+          setErrorMsg(data?.error || 'Database connection error');
+        }
       } catch (e) {
         console.error('Error fetching categories:', e);
+        setErrorMsg(e.message || 'Error loading categories.');
       }
     }
     loadCategories();
@@ -50,6 +56,7 @@ export default function ResourcesLibrary({ navigateTo }) {
   useEffect(() => {
     async function loadResources() {
       setIsLoading(true);
+      setErrorMsg(null);
       try {
         const queryParams = new URLSearchParams({
           search: searchTerm,
@@ -59,10 +66,18 @@ export default function ResourcesLibrary({ navigateTo }) {
         });
         const res = await fetch(`/api/resources/list?${queryParams.toString()}`);
         const data = await res.json();
-        setResources(data);
+        
+        if (Array.isArray(data)) {
+          setResources(data);
+        } else {
+          setResources([]);
+          setErrorMsg(data?.error || 'Database connection error');
+        }
         setCurrentPage(1); // Reset to page 1 on query changes
       } catch (e) {
         console.error('Error loading resources:', e);
+        setErrorMsg(e.message || 'Error loading resources.');
+        setResources([]);
       } finally {
         setIsLoading(false);
       }
@@ -75,10 +90,11 @@ export default function ResourcesLibrary({ navigateTo }) {
     return () => clearTimeout(delayDebounce);
   }, [searchTerm, selectedCategory, selectedSubcategory, sortBy]);
 
-  // Pagination
-  const totalPages = Math.ceil(resources.length / itemsPerPage);
+  // Pagination safely
+  const resourcesList = Array.isArray(resources) ? resources : [];
+  const totalPages = Math.ceil(resourcesList.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentPdfs = resources.slice(startIndex, startIndex + itemsPerPage);
+  const currentPdfs = resourcesList.slice(startIndex, startIndex + itemsPerPage);
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -232,7 +248,7 @@ export default function ResourcesLibrary({ navigateTo }) {
 
         {/* Results Counter */}
         <div style={{ color: T.muted, fontSize: 13 }}>
-          Showing {currentPdfs.length} of {resources.length} results
+          Showing {currentPdfs.length} of {resourcesList.length} results
         </div>
       </div>
 
@@ -245,7 +261,18 @@ export default function ResourcesLibrary({ navigateTo }) {
           }} />
           <div style={{ fontSize: 13, color: T.muted }}>Loading PDF collection...</div>
         </div>
-      ) : resources.length === 0 ? (
+      ) : errorMsg ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', background: T.s1, borderRadius: 16, border: `1px solid ${T.border}`, maxWidth: 600, margin: '20px auto' }}>
+          <BookOpen size={48} color="#EF4444" style={{ marginBottom: 12 }} />
+          <h3 style={{ color: T.text, fontSize: 16, fontWeight: 700, margin: '0 0 8px 0' }}>Database Connection Issue</h3>
+          <p style={{ color: T.muted, fontSize: 13.5, margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            {errorMsg}
+          </p>
+          <div style={{ fontSize: 12, color: T.muted, background: 'rgba(239, 68, 68, 0.05)', padding: '12px 16px', borderRadius: 8, border: '1px dashed rgba(239, 68, 68, 0.2)', textAlign: 'left' }}>
+            <strong>How to resolve:</strong> Make sure the Oregon TiDB Serverless environment variables are correctly configured on your Vercel deployment (e.g. <code>DB_HOST</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code>, and <code>DB_RESOURCES_NAME="pdf_resources_db"</code>).
+          </div>
+        </div>
+      ) : resourcesList.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '80px 20px', background: T.s1, borderRadius: 16, border: `1px solid ${T.border}` }}>
           <BookOpen size={48} color={T.muted} style={{ marginBottom: 12 }} />
           <h3 style={{ color: T.text, fontSize: 16, fontWeight: 700, margin: '0 0 4px 0' }}>No PDFs Found</h3>
