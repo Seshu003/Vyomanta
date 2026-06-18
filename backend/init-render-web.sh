@@ -137,7 +137,7 @@ bench --site lms.render migrate
 
 # Bootstrap student users in the database
 echo "Bootstrapping student users..."
-bench --site lms.render run-script /home/frappe/create_students.py
+bench --site lms.render execute "exec(open('/home/frappe/create_students.py').read())"
 
 # Shutdown the dummy server to free port 8000
 echo "Stopping dummy server..."
