@@ -2,7 +2,7 @@ import os
 import sys
 
 def main():
-    api_path = '/home/frappe/frappe-bench/apps/lms/lms/api.py'
+    api_path = '/home/frappe/frappe-bench/apps/lms/lms/lms/api.py'
     if not os.path.exists(api_path):
         print(f"❌ Error: {api_path} not found!")
         sys.exit(1)
@@ -25,7 +25,7 @@ def get_google_auth_url(redirect_to=None):
 
     with open(api_path, 'a') as f:
         f.write(patch_code)
-    print("✅ Patched apps/lms/lms/api.py successfully!")
+    print("✅ Patched apps/lms/lms/lms/api.py successfully!")
 
 if __name__ == '__main__':
     main()
