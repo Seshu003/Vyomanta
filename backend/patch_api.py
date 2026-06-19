@@ -19,8 +19,15 @@ def main():
 @frappe.whitelist(allow_guest=True)
 def get_google_auth_url(redirect_to=None):
     import frappe
-    from frappe.utils.oauth import get_oauth2_authorize_url
-    return get_oauth2_authorize_url("google", redirect_to)
+    import traceback
+    try:
+        from frappe.utils.oauth import get_oauth2_authorize_url
+        return get_oauth2_authorize_url("google", redirect_to)
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 """
 
     with open(api_path, 'a') as f:
