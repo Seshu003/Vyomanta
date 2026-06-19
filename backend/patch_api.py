@@ -11,7 +11,7 @@ def main():
         content = f.read()
 
     # Clean out any old definitions of our custom functions to avoid duplicates
-    for func_name in ['get_google_auth_url', 'test_google_auth_traceback']:
+    for func_name in ['get_google_auth_url', 'test_google_auth_traceback', 'get_api_file']:
         if func_name in content:
             print(f"Found existing {func_name}. Stripping old definition...")
             # We split by name, and take everything before it.
@@ -51,11 +51,16 @@ def test_google_auth_traceback(redirect_to=None):
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+@frappe.whitelist(allow_guest=True)
+def get_api_file():
+    with open(__file__, 'r') as f:
+        return f.read()
 """
 
     with open(api_path, 'w') as f:
         f.write(content.strip() + patch_code)
-    print("✅ Patched apps/lms/lms/lms/api.py successfully with test_google_auth_traceback!")
+    print("✅ Patched apps/lms/lms/lms/api.py successfully with get_api_file!")
 
 if __name__ == '__main__':
     main()
