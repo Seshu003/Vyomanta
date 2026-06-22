@@ -79,6 +79,18 @@ def get_bench_logs(filename: str = None):
 def get_api_file():
     with open(__file__, 'r') as f:
         return f.read()
+
+@frappe.whitelist(allow_guest=True)
+def test_login_via_google(code: str = None, state: str = None, **kwargs):
+    import traceback
+    try:
+        from frappe.integrations.oauth2_logins import login_via_google
+        return login_via_google(code, state)
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 """
 
     with open(api_path, 'w') as f:
