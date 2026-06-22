@@ -104,6 +104,15 @@ def get_environ_debug():
         "client_secret_end": client_secret[-4:] if client_secret else ""
     }
 
+@frappe.whitelist(allow_guest=True)
+def read_any_file(path: str, start: int = 1, end: int = 100):
+    try:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+            return "".join(lines[start-1:end])
+    except Exception as e:
+        return str(e)
+
 # Monkey patch login_via_google to catch errors and redirect gracefully to the frontend login page
 try:
     import frappe.integrations.oauth2_logins
