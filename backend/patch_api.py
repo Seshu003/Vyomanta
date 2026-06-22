@@ -115,11 +115,12 @@ def read_any_file(path: str, start: int = 1, end: int = 100):
 
 # Monkey patch login_via_google to catch errors and redirect gracefully to the frontend login page
 try:
+    import frappe
     import frappe.integrations.oauth2_logins
     orig_login_via_google = frappe.integrations.oauth2_logins.login_via_google
 
+    @frappe.whitelist(allow_guest=True)
     def patched_login_via_google(code: str, state: str, **kwargs):
-        import frappe
         try:
             return orig_login_via_google(code, state, **kwargs)
         except Exception as e:
@@ -144,10 +145,6 @@ try:
             frappe.local.response["type"] = "redirect"
             frappe.local.response["location"] = f"{frontend_url}/login?error=oauth_failed"
 
-    # Retain the whitelist flag
-    patched_login_via_google.whitelisted = True
-    patched_login_via_google.allow_guest = True
-    
     frappe.integrations.oauth2_logins.login_via_google = patched_login_via_google
 except Exception as patch_err:
     import frappe
