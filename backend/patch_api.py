@@ -91,6 +91,18 @@ def test_login_via_google(code: str = None, state: str = None, **kwargs):
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+@frappe.whitelist(allow_guest=True)
+def get_environ_debug():
+    import os
+    client_id = os.environ.get("GOOGLE_CLIENT_ID") or ""
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or ""
+    return {
+        "client_id": client_id,
+        "client_secret_len": len(client_secret),
+        "client_secret_start": client_secret[:10],
+        "client_secret_end": client_secret[-4:] if client_secret else ""
+    }
 """
 
     with open(api_path, 'w') as f:
