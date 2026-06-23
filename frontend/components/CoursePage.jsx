@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import {
-  CheckCircle, Circle, Clock, Play, GraduationCap, ChevronRight, ArrowLeft, Users, Tag, BookOpen
+  CheckCircle, Circle, Clock, Play, GraduationCap, ChevronRight, ArrowLeft, Users, Tag, BookOpen, Terminal
 } from 'lucide-react';
 import { T } from '@/lib/lms-data';
 import { getCourses, getCourseSyllabus, checkStudentEnrollment, enrollStudentInCourse, getStudentEnrollments, saveProgressToRedis, getProgressFromRedis } from '@/lib/frappe';
 import { useMediaQuery, isMobileMQ } from '@/lib/useMediaQuery';
+import dynamic from 'next/dynamic';
+const Playground = dynamic(() => import('./Playground'), { ssr: false });
 
 export default function CoursePage() {
   const isMobile = useMediaQuery(isMobileMQ);
   const rPad = isMobile ? 16 : 36;
+  const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false);
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -195,35 +198,61 @@ export default function CoursePage() {
     const done = courseLessons.filter(l => completed[l.id]).length;
     const progressPercent = total > 0 ? Math.round((done / total) * 100) : 0;
 
+    const outerStyle = isPlaygroundOpen && !isMobile
+      ? { padding: '32px 24px', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 28, fontFamily: 'var(--font-outfit), sans-serif', width: '100%', maxWidth: '100%' }
+      : { padding: isMobile ? '20px 16px' : '32px 36px', fontFamily: 'var(--font-outfit), sans-serif' };
+
     return (
-      <div style={{ padding: isMobile ? '20px 16px' : '32px 36px', fontFamily: 'var(--font-outfit), sans-serif' }}>
-        
-        {/* Back button */}
-        <button
-          onClick={() => {
-            setSelectedCourse(null);
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('selected_course_id');
-            }
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: 'none',
-            border: 'none',
-            color: T.muted,
-            cursor: 'pointer',
-            fontSize: 13,
-            marginBottom: 20,
-            padding: 0,
-            transition: 'color 0.2s'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.color = T.text}
-          onMouseLeave={(e) => e.currentTarget.style.color = T.muted}
-        >
-          <ArrowLeft size={15} /> Back to Courses
-        </button>
+      <div style={outerStyle}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+            {/* Back button */}
+            <button
+              onClick={() => {
+                setSelectedCourse(null);
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('selected_course_id');
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'none',
+                border: 'none',
+                color: T.muted,
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: 0,
+                transition: 'color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = T.text}
+              onMouseLeave={(e) => e.currentTarget.style.color = T.muted}
+            >
+              <ArrowLeft size={15} /> Back to Courses
+            </button>
+
+            <button
+              onClick={() => setIsPlaygroundOpen(!isPlaygroundOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: isPlaygroundOpen ? `${T.accent}15` : 'transparent',
+                border: `1px solid ${isPlaygroundOpen ? T.accent : 'var(--border)'}`,
+                color: isPlaygroundOpen ? T.accent : 'var(--text)',
+                cursor: 'pointer',
+                fontSize: 12.5,
+                fontWeight: 600,
+                padding: '6px 14px',
+                borderRadius: 8,
+                transition: 'all 0.15s'
+              }}
+            >
+              <Terminal size={14} />
+              {isPlaygroundOpen ? 'Close Playground' : 'Practice Playground'}
+            </button>
+          </div>
 
         {/* Course Detail Header */}
         <div style={{ marginBottom: 28 }}>
@@ -393,23 +422,58 @@ export default function CoursePage() {
             </div>
           </>
         )}
+          {isPlaygroundOpen && isMobile && (
+            <div style={{ marginTop: 24, height: 400 }}>
+              <Playground initialCode={`# Practice for: ${selectedCourse.title}\n# Write your code here\n\n`} />
+            </div>
+          )}
+        </div>
+
+        {isPlaygroundOpen && !isMobile && (
+          <div style={{ position: 'sticky', top: 32, height: 'calc(100vh - 64px)', minHeight: 500 }}>
+            <Playground initialCode={`# Practice for: ${selectedCourse.title}\n# Write your code here\n\n`} />
+          </div>
+        )}
       </div>
     );
   }
 
   // Render Courses Directory
   return (
-    <div style={{ padding: isMobile ? '20px 16px' : '32px 36px', fontFamily: 'var(--font-outfit), sans-serif' }}>
-      
-      {/* Directory Title */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ color: T.text, fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.04em' }}>
-          Explore Courses
-        </h1>
-        <p style={{ color: T.muted, marginTop: 6, fontSize: isMobile ? 14 : 15 }}>
-          Study structured paths curated by instructors, powered by Frappe LMS.
-        </p>
-      </div>
+    <div style={outerStyle}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Directory Title */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h1 style={{ color: T.text, fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.04em' }}>
+              Explore Courses
+            </h1>
+            <p style={{ color: T.muted, marginTop: 6, fontSize: isMobile ? 14 : 15 }}>
+              Study structured paths curated by instructors, powered by Frappe LMS.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsPlaygroundOpen(!isPlaygroundOpen)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: isPlaygroundOpen ? `${T.accent}15` : 'transparent',
+              border: `1px solid ${isPlaygroundOpen ? T.accent : 'var(--border)'}`,
+              color: isPlaygroundOpen ? T.accent : 'var(--text)',
+              cursor: 'pointer',
+              fontSize: 12.5,
+              fontWeight: 600,
+              padding: '6px 14px',
+              borderRadius: 8,
+              transition: 'all 0.15s'
+            }}
+          >
+            <Terminal size={14} />
+            {isPlaygroundOpen ? 'Close Playground' : 'Practice Playground'}
+          </button>
+        </div>
 
       {courses.length === 0 ? (
         <div style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: 16, padding: '48px 20px', textAlign: 'center' }}>
@@ -523,6 +587,18 @@ export default function CoursePage() {
               </div>
             );
           })}
+        </div>
+      )}
+        {isPlaygroundOpen && isMobile && (
+          <div style={{ marginTop: 24, height: 400 }}>
+            <Playground initialCode={`# General Coding Playground\n# Write your code here\n\n`} />
+          </div>
+        )}
+      </div>
+
+      {isPlaygroundOpen && !isMobile && (
+        <div style={{ position: 'sticky', top: 32, height: 'calc(100vh - 64px)', minHeight: 500 }}>
+          <Playground initialCode={`# General Coding Playground\n# Write your code here\n\n`} />
         </div>
       )}
     </div>

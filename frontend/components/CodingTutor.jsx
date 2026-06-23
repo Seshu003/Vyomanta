@@ -3,7 +3,8 @@
 import { Code2 } from 'lucide-react';
 import { T } from '@/lib/lms-data';
 import { useMediaQuery, isMobileMQ } from '@/lib/useMediaQuery';
-import Playground from './Playground';
+import dynamic from 'next/dynamic';
+const Playground = dynamic(() => import('./Playground'), { ssr: false });
 
 export default function CodingTutor() {
   const isMobile = useMediaQuery(isMobileMQ);

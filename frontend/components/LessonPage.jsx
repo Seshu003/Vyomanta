@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { T, COURSE, geminiCall, buildQuizPrompt, parseQuizOutput, getCourseDetails } from '@/lib/lms-data';
 import { useMediaQuery, isMobileMQ } from '@/lib/useMediaQuery';
-import Playground from './Playground';
+import dynamic from 'next/dynamic';
+const Playground = dynamic(() => import('./Playground'), { ssr: false });
 import {
   getCourses, getQuizzes, submitQuizResponse, getQuizSubmissions,
   getAssignments, submitAssignmentResponse, getAssignmentSubmissions
