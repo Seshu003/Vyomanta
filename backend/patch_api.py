@@ -144,11 +144,11 @@ def get_courses_optimized():
         
         enrollment_counts = {}
         try:
-            counts = frappe.db.sql("""
+            counts = frappe.db.sql('''
                 select course, count(name) as count
                 from `tabLMS Enrollment`
                 group by course
-            """, as_dict=True)
+            ''', as_dict=True)
             for row in counts:
                 enrollment_counts[row["course"]] = row["count"]
         except Exception:
