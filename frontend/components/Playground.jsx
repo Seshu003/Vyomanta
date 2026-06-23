@@ -73,23 +73,32 @@ export default function Playground({ initialCode = '# Write your Python code her
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalElRef.current);
-    fitAddon.fit();
 
     terminalInstanceRef.current = term;
     fitAddonRef.current = fitAddon;
 
     term.writeln("\x1b[33mLoading Python Environment (Pyodide WASM)...\x1b[0m");
 
-    // Handle resize
-    const handleResize = () => {
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
+    // Bulletproof terminal fitting using ResizeObserver
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          try {
+            fitAddon.fit();
+          } catch (e) {
+            // Ignore errors during CSS transition resizing
+          }
+        }
       }
-    };
-    window.addEventListener('resize', handleResize);
+    });
+
+    if (terminalElRef.current) {
+      resizeObserver.observe(terminalElRef.current);
+    }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       term.dispose();
     };
   }, []);
