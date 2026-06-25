@@ -8,7 +8,7 @@ import { python } from '@codemirror/lang-python';
 import {
   Code2, Loader2, ChevronRight, Lock, FlipHorizontal,
   Paperclip, Mic, Image, HelpCircle, Send, AlignLeft, Sparkles, ChevronLeft,
-  BookOpen, BarChart3, Home, Zap
+  BookOpen, BarChart3, Home, Zap, Brain, Award, FileText, FolderOpen, Briefcase
 } from 'lucide-react';
 import {
   T, geminiCall,
@@ -27,6 +27,18 @@ const Playground = dynamic(() => import('./Playground'), { ssr: false });
 const MODES = ['Beginner', 'Exam', 'Interview', 'Revision'];
 const LENGTHS = ['Short', 'Medium', 'Deep'];
 const modeColors = { Beginner: T.green, Exam: T.accent, Interview: T.amber, Revision: T.purple };
+
+const NAV = [
+  { id: '/',              Icon: Home,          label: 'Dashboard'     },
+  { id: '/courses',       Icon: BookOpen,      label: 'Courses'       },
+  { id: '/quizzes',       Icon: Award,         label: 'Quizzes'       },
+  { id: '/assignments',   Icon: FileText,      label: 'Assignments'   },
+  { id: '/resources',     Icon: FolderOpen,    label: 'Resources'     },
+  { id: '/general-tutor', Icon: Brain,         label: 'General Tutor' },
+  { id: '/coding-tutor',  Icon: Code2,         label: 'Coding Tutor'  },
+  { id: '/jobs',          Icon: Briefcase,     label: 'Jobs'          },
+  { id: '/progress',      Icon: BarChart3,     label: 'Progress'      },
+];
 
 const SUGGESTIONS = [
   { id: 'quiz', label: 'Coding Quiz', Icon: HelpCircle, color: T.accent },
@@ -294,6 +306,9 @@ export default function CodingTutor() {
       setCurrentSessionId(null);
       setTopic('');
       setErr('');
+      setIsPlaygroundOpen(false);
+      setCodeOverride(null);
+      setExplanationOverride(null);
     };
 
     window.addEventListener('select-coding-tutor-session', handleSelect);
@@ -634,7 +649,7 @@ export default function CodingTutor() {
 
   return (
     <>
-      <MobileNav title="Coding Tutor" accent={T.amber} items={tutorNavItems} extras={tutorExtras} />
+      <MobileNav title="Coding Tutor" accent={T.amber} items={[]} dropdownItems={NAV} extras={tutorExtras} />
       <div style={{ display: 'flex', height: '100vh', background: T.bg, overflow: 'hidden' }}>
         <div id="tutor-workspace-container" style={{ flex: 1, display: 'flex', flexDirection: showVerticalSplit ? 'column' : 'row', overflow: 'hidden' }}>
           

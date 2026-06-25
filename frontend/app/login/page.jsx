@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const showDemoCredentials = false;
 
   // Clear any existing session on mount and parse query errors
   useEffect(() => {
@@ -348,107 +349,109 @@ export default function LoginPage() {
         </div>
 
         {/* Credentials helper panel */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: `1px solid ${T.border}`,
-          borderRadius: 12,
-          padding: '18px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12
-        }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>💡</span> Demo Credentials (click to fill)
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* Admin trigger */}
-            <button
-              type="button"
-              onClick={() => fillCredentials('admin')}
-              style={{
-                background: email === 'admin@lms.com' ? 'rgba(155, 110, 248, 0.12)' : T.s2,
-                border: `1px solid ${email === 'admin@lms.com' ? T.purple : T.border}`,
-                borderRadius: 8,
-                padding: '10px 14px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                transition: 'background 0.2s'
-              }}
-              onMouseEnter={(e) => { if (email !== 'admin@lms.com') e.currentTarget.style.background = T.s3; }}
-              onMouseLeave={(e) => { if (email !== 'admin@lms.com') e.currentTarget.style.background = T.s2; }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  background: 'rgba(155, 110, 248, 0.2)',
-                  color: T.purple,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <Shield size={14} />
+        {showDemoCredentials && (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: `1px solid ${T.border}`,
+            borderRadius: 12,
+            padding: '18px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12
+          }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>💡</span> Demo Credentials (click to fill)
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Admin trigger */}
+              <button
+                type="button"
+                onClick={() => fillCredentials('admin')}
+                style={{
+                  background: email === 'admin@lms.com' ? 'rgba(155, 110, 248, 0.12)' : T.s2,
+                  border: `1px solid ${email === 'admin@lms.com' ? T.purple : T.border}`,
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => { if (email !== 'admin@lms.com') e.currentTarget.style.background = T.s3; }}
+                onMouseLeave={(e) => { if (email !== 'admin@lms.com') e.currentTarget.style.background = T.s2; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: 'rgba(155, 110, 248, 0.2)',
+                    color: T.purple,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <Shield size={14} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.purple }}>Admin Workspace</div>
+                    <div style={{ fontSize: 9.5, color: T.muted, fontFamily: 'monospace' }}>admin@lms.com</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: T.purple }}>Admin Workspace</div>
-                  <div style={{ fontSize: 9.5, color: T.muted, fontFamily: 'monospace' }}>admin@lms.com</div>
-                </div>
+                <span style={{ fontSize: 9.5, color: T.dim }}>password: admin123</span>
+              </button>
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>👥</span> Select Student Profile to Sign In
               </div>
-              <span style={{ fontSize: 9.5, color: T.dim }}>password: admin123</span>
-            </button>
 
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.text, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>👥</span> Select Student Profile to Sign In
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {students.map((std) => (
-                <button
-                  key={std.email}
-                  type="button"
-                  onClick={() => fillCredentials('student', std.email)}
-                  style={{
-                    background: email === std.email ? `${T.accent}12` : T.s2,
-                    border: `1px solid ${email === std.email ? T.accent : T.border}`,
-                    borderRadius: 8,
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => { if (email !== std.email) e.currentTarget.style.background = T.s3; }}
-                  onMouseLeave={(e) => { if (email !== std.email) e.currentTarget.style.background = T.s2; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 26, height: 26, borderRadius: '50%',
-                      background: `${T.accent}20`,
-                      color: T.accent,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      <User size={13} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {students.map((std) => (
+                  <button
+                    key={std.email}
+                    type="button"
+                    onClick={() => fillCredentials('student', std.email)}
+                    style={{
+                      background: email === std.email ? `${T.accent}12` : T.s2,
+                      border: `1px solid ${email === std.email ? T.accent : T.border}`,
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => { if (email !== std.email) e.currentTarget.style.background = T.s3; }}
+                    onMouseLeave={(e) => { if (email !== std.email) e.currentTarget.style.background = T.s2; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 26, height: 26, borderRadius: '50%',
+                        background: `${T.accent}20`,
+                        color: T.accent,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}>
+                        <User size={13} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{std.name}</div>
+                        <div style={{ fontSize: 9.5, color: T.muted }}>{std.email}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{std.name}</div>
-                      <div style={{ fontSize: 9.5, color: T.muted }}>{std.email}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 9.5, color: T.accent, fontWeight: 600, background: `${T.accent}10`, padding: '2px 6px', borderRadius: 4 }}>
+                        {std.desc}
+                      </span>
                     </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 9.5, color: T.accent, fontWeight: 600, background: `${T.accent}10`, padding: '2px 6px', borderRadius: 4 }}>
-                      {std.desc}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Footer info */}
         <div style={{ textAlign: 'center', fontSize: 11.5, color: T.dim }}>

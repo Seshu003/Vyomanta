@@ -43,7 +43,7 @@ export default function ResourcesPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'radial-gradient(circle at center, #0F132A 0%, #07080F 100%)',
+      background: 'var(--bg)',
       width: '100%',
       overflowY: 'auto'
     }}>

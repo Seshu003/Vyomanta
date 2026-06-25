@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Home, BookOpen, Brain, Code2, BarChart3, Zap } from 'lucide-react';
+import { Home, BookOpen, Brain, Code2, BarChart3, Zap, ArrowLeft } from 'lucide-react';
 import { T } from '@/lib/lms-data';
-import UnifiedSidebar from './UnifiedSidebar';
 import VoiceChatMessages from './VoiceChatMessages';
 import VoiceRobotVisualizer from './VoiceRobotVisualizer';
 import MobileNav from '@/components/MobileNav';
@@ -427,28 +426,37 @@ export default function VoiceAgentView({ onClose, initialSession }) {
     return items;
   };
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSidebarCollapsed(localStorage.getItem('sidebar_collapsed') === 'true');
+      const handleStorageChange = () => {
+        setSidebarCollapsed(localStorage.getItem('sidebar_collapsed') === 'true');
+      };
+      window.addEventListener('storage', handleStorageChange);
+      const interval = setInterval(handleStorageChange, 200);
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+        clearInterval(interval);
+      };
+    }
+  }, []);
+
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: voiceZ,
-      display: 'flex', background: T.bg, color: T.text,
-      fontFamily: 'var(--font-outfit), "Segoe UI", sans-serif'
+      position: 'fixed',
+      top: 0,
+      bottom: 0,
+      left: isMobile ? 0 : (sidebarCollapsed ? 70 : 220),
+      right: 0,
+      zIndex: voiceZ,
+      display: 'flex',
+      background: T.bg,
+      color: T.text,
+      fontFamily: 'var(--font-outfit), "Segoe UI", sans-serif',
+      transition: 'left 0.2s ease'
     }}>
-      {/* History Sidebar — desktop only; mobile uses MobileNav menu */}
-      {!isMobile && (
-        <UnifiedSidebar
-          sessions={mergedSessions}
-          currentSessionId={null}
-          onSelectSession={(session) => {
-            if (session.type === 'voice') {
-              handleSelectSession(session);
-            } else {
-              // Text session clicked — close overlay, parent will restore it
-              onClose();
-            }
-          }}
-          onBack={onClose}
-        />
-      )}
       <MobileNav title="Voice Tutor" accent={T.accent} items={voiceNavItems} extras={voiceExtras} zBase={isMobile ? 10 : 0} />
 
       {/* Main Area */}
@@ -460,6 +468,31 @@ export default function VoiceAgentView({ onClose, initialSession }) {
           background: T.s1, borderBottom: `1px solid ${T.border}`, flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
+            <button
+              onClick={onClose}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'transparent',
+                border: 'none',
+                color: T.muted,
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 600,
+                padding: '4px 8px',
+                borderRadius: 6,
+                fontFamily: 'inherit',
+                transition: 'all 0.2s',
+                marginRight: 4
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.background = T.s2; }}
+              onMouseLeave={e => { e.currentTarget.style.color = T.muted; e.currentTarget.style.background = 'transparent'; }}
+              title="Back to Text Chat"
+            >
+              <ArrowLeft size={16} />
+              {!isMobile && <span>Back</span>}
+            </button>
             <h2 style={{ fontSize: isMobile ? 14 : 16, fontWeight: 700, color: T.text, margin: 0 }}>
               {SUBJECTS.find((s) => s.id === selectedSubject)?.name || 'General Tutor'}
             </h2>

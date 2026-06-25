@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import {
   Brain, Loader2, ChevronRight, Lock, FlipHorizontal,
   Paperclip, Mic, Image, HelpCircle, Send, AlignLeft, Sparkles, ChevronLeft,
-  BookOpen, Code2, BarChart3, Home, Zap
+  BookOpen, Code2, BarChart3, Home, Zap, Award, FileText, FolderOpen, Briefcase
 } from 'lucide-react';
 import {
   T, geminiCall,
@@ -23,6 +23,18 @@ import { useMediaQuery, isMobileMQ } from '@/lib/useMediaQuery';
 const MODES = ['Beginner', 'Exam', 'Interview', 'Revision'];
 const LENGTHS = ['Short', 'Medium', 'Deep'];
 const modeColors = { Beginner: T.green, Exam: T.accent, Interview: T.amber, Revision: T.purple };
+
+const NAV = [
+  { id: '/',              Icon: Home,          label: 'Dashboard'     },
+  { id: '/courses',       Icon: BookOpen,      label: 'Courses'       },
+  { id: '/quizzes',       Icon: Award,         label: 'Quizzes'       },
+  { id: '/assignments',   Icon: FileText,      label: 'Assignments'   },
+  { id: '/resources',     Icon: FolderOpen,    label: 'Resources'     },
+  { id: '/general-tutor', Icon: Brain,         label: 'General Tutor' },
+  { id: '/coding-tutor',  Icon: Code2,         label: 'Coding Tutor'  },
+  { id: '/jobs',          Icon: Briefcase,     label: 'Jobs'          },
+  { id: '/progress',      Icon: BarChart3,     label: 'Progress'      },
+];
 
 const SUGGESTIONS = [
   { id: 'quiz', label: 'Quiz', Icon: HelpCircle, color: T.accent },
@@ -163,6 +175,8 @@ export default function GeneralTutor() {
       setCurrentSessionId(null);
       setTopic('');
       setErr('');
+      setShowVoiceAgent(false);
+      setVoiceSessionToRestore(null);
     };
 
     window.addEventListener('select-general-tutor-session', handleSelect);
@@ -495,7 +509,7 @@ export default function GeneralTutor() {
 
   return (
     <>
-      <MobileNav title="General Tutor" accent={T.purple} items={tutorNavItems} extras={tutorExtras} />
+      <MobileNav title="General Tutor" accent={T.purple} items={[]} dropdownItems={NAV} extras={tutorExtras} />
       <div style={{ display: 'flex', height: '100vh', background: T.bg, overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 

@@ -194,10 +194,18 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
   // ── Desktop: vertical sidebar ──
   return (
     <div style={{
-      width: isCollapsed ? 70 : 220, minHeight: '100vh', background: T.s1,
-      borderRight: `1px solid ${T.border}`, display: 'flex',
-      flexDirection: 'column', padding: '24px 0', flexShrink: 0,
-      position: 'relative', transition: 'width 0.2s ease'
+      width: isCollapsed ? 70 : 220,
+      height: '100vh',
+      maxHeight: '100vh',
+      background: T.s1,
+      borderRight: `1px solid ${T.border}`,
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '24px 0',
+      flexShrink: 0,
+      position: 'relative',
+      transition: 'width 0.2s ease',
+      overflow: 'hidden'
     }}>
       {/* Floating Toggle Button */}
       <button
@@ -228,7 +236,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
       </button>
 
       {/* Brand Header */}
-      <div style={{ padding: isCollapsed ? '0 0 16px' : '0 20px 28px', borderBottom: `1px solid ${T.border}`, marginBottom: 16, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ padding: isCollapsed ? '0 0 16px' : '0 20px 28px', borderBottom: `1px solid ${T.border}`, marginBottom: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: isCollapsed ? 'center' : 'flex-start', width: '100%' }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: `${T.accent}22`, border: `1px solid ${T.accent}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -292,7 +300,19 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
       </div>
 
       {/* Nav Menu */}
-      <div style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', alignItems: isCollapsed ? 'center' : 'stretch', overflow: 'hidden' }}>
+      <div 
+        className="no-scrollbar"
+        style={{ 
+          flex: 1, 
+          padding: '0 12px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: isCollapsed ? 'center' : 'stretch', 
+          overflowY: 'auto',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none'
+        }}
+      >
         {isTutorPage ? (
           <>
             {isCollapsed ? (
@@ -311,6 +331,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                   cursor: 'pointer',
                   marginBottom: 10,
                   transition: 'all 0.2s',
+                  flexShrink: 0,
                 }}
                 title={`Expand for ${isGeneralTutor ? 'General Tutor' : 'Coding Tutor'}`}
               >
@@ -336,6 +357,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                   transition: 'all 0.2s',
                   fontFamily: 'inherit',
                   marginBottom: dropdownOpen ? 4 : 8,
+                  flexShrink: 0,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
@@ -365,7 +387,8 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                 marginTop: dropdownOpen ? 4 : 0,
                 marginBottom: dropdownOpen ? 12 : 0,
                 paddingBottom: dropdownOpen ? 12 : 0,
-                borderBottom: dropdownOpen ? `1px solid ${T.border}` : 'none'
+                borderBottom: dropdownOpen ? `1px solid ${T.border}` : 'none',
+                flexShrink: 0,
               }}>
                 {NAV.map(({ id, Icon, label }) => {
                   const active = isActive(id);
@@ -406,7 +429,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
 
             {/* Tutor Session History */}
             {isCollapsed ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', marginTop: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', marginTop: 16, flexShrink: 0 }}>
                 <button
                   onClick={handleNewSession}
                   style={{
@@ -486,6 +509,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                     marginBottom: 16,
                     transition: 'all 0.2s',
                     fontFamily: 'inherit',
+                    flexShrink: 0,
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.borderColor = T.accent;
@@ -503,7 +527,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                 </button>
 
                 {/* History List */}
-                <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4, width: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                   {orderedGroups.map((group) => {
                     const items = groupedSessions[group];
                     if (!items || items.length === 0) return null;
@@ -611,6 +635,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                 letterSpacing: '-0.01em',
                 transition: 'all 0.15s',
                 fontFamily: 'inherit',
+                flexShrink: 0,
               }}
               title={isCollapsed ? label : ""}
               >
@@ -623,7 +648,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
       </div>
 
       {/* User Profile */}
-      <div style={{ padding: '14px 12px', borderTop: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', alignItems: isCollapsed ? 'center' : 'stretch', gap: 10 }}>
+      <div style={{ padding: '14px 12px', borderTop: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', alignItems: isCollapsed ? 'center' : 'stretch', gap: 10, flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: isCollapsed ? 'column' : 'row', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', width: '100%', gap: isCollapsed ? 12 : 9 }}>
           <div style={{ display: 'flex', flexDirection: isCollapsed ? 'column' : 'row', alignItems: 'center', gap: isCollapsed ? 6 : 9 }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${T.purple}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: T.purple, fontWeight: 700, flexShrink: 0 }}>
