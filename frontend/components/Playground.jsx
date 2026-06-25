@@ -37,7 +37,7 @@ export default function Playground({
   const terminalInstanceRef = useRef(null);
   const fitAddonRef = useRef(null);
   const playIntervalRef = useRef(null);
-  const codeLinesRef = useRef(null);
+  const editorViewRef = useRef(null);
 
   // Hook callbacks
   const onStdout = (text) => {
@@ -101,9 +101,9 @@ export default function Playground({
     }
   }, [codeOverride, runTrace]);
 
-  // Play animation loop
+  // Auto-play interval
   useEffect(() => {
-    if (isPlaying && traceData && traceData.length > 0) {
+    if (isPlaying && traceData) {
       playIntervalRef.current = setInterval(() => {
         setCurrentStep((prev) => {
           if (prev >= traceData.length - 1) {
@@ -112,24 +112,38 @@ export default function Playground({
           }
           return prev + 1;
         });
-      }, 1000); // 1 step per second
-    } else {
-      if (playIntervalRef.current) clearInterval(playIntervalRef.current);
+      }, 1500);
     }
     return () => {
       if (playIntervalRef.current) clearInterval(playIntervalRef.current);
     };
   }, [isPlaying, traceData]);
 
-  // Scroll active code line into view
+  // Highlight and scroll active code line into view in CodeMirror editor
   useEffect(() => {
-    if (traceData && traceData[currentStep]) {
-      const activeLine = traceData[currentStep].line;
-      if (codeLinesRef.current) {
-        const lineEl = codeLinesRef.current.querySelector(`[data-line="${activeLine}"]`);
-        if (lineEl) {
-          lineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (editorViewRef.current) {
+      const view = editorViewRef.current;
+      if (traceData && traceData[currentStep]) {
+        const activeLine = traceData[currentStep].line;
+        try {
+          if (activeLine > 0 && activeLine <= view.state.doc.lines) {
+            const line = view.state.doc.line(activeLine);
+            view.dispatch({
+              selection: { anchor: line.from, head: line.to },
+              scrollIntoView: true
+            });
+          }
+        } catch (e) {
+          console.warn("Error highlighting line in CodeMirror:", e);
         }
+      } else {
+        // Clear active selection when trace is finished/stopped/cleared
+        try {
+          const pos = view.state.selection.main.head;
+          view.dispatch({
+            selection: { anchor: pos, head: pos }
+          });
+        } catch (e) {}
       }
     }
   }, [currentStep, traceData]);
@@ -460,6 +474,9 @@ export default function Playground({
             theme="dark"
             extensions={[python()]}
             onChange={(value) => setCode(value)}
+            onCreateEditor={(view) => {
+              editorViewRef.current = view;
+            }}
             style={{ fontSize: 13, fontFamily: 'monospace' }}
           />
         </div>
@@ -658,47 +675,9 @@ export default function Playground({
                 {/* Left/Right Panels Layout */}
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                   
-                  {/* Left: Code Viewer */}
-                  <div
-                    ref={codeLinesRef}
-                    style={{
-                      flex: 0.5,
-                      borderRight: `1px solid var(--border)`,
-                      overflowY: 'auto',
-                      padding: '8px 0',
-                      background: 'var(--s1)'
-                    }}
-                  >
-                    {code.split('\n').map((line, idx) => {
-                      const lineNum = idx + 1;
-                      const stepObj = traceData[currentStep] || {};
-                      const isCurrent = stepObj.line === lineNum;
-                      return (
-                        <div
-                          key={idx}
-                          data-line={lineNum}
-                          style={{
-                            display: 'flex',
-                            background: isCurrent ? 'rgba(91,140,248,0.14)' : 'transparent',
-                            borderLeft: `4px solid ${isCurrent ? 'var(--accent)' : 'transparent'}`,
-                            padding: '2px 8px',
-                            fontSize: 12.5,
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre',
-                            color: isCurrent ? 'var(--text)' : 'var(--muted)',
-                            transition: 'all 0.1s'
-                          }}
-                        >
-                          <span style={{ width: 24, color: 'var(--dim)', userSelect: 'none', display: 'inline-block' }}>{lineNum}</span>
-                          <code>{line || ' '}</code>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right: Variable Visualizer Panel */}
+                  {/* Variable Visualizer Panel (Full Width) */}
                   <div style={{
-                    flex: 0.5,
+                    flex: 1,
                     overflowY: 'auto',
                     padding: 14,
                     background: 'var(--s1)'

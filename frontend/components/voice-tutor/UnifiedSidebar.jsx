@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { T } from '@/lib/lms-data';
-import { Brain, Zap, ArrowLeft, Settings, Menu, X } from 'lucide-react';
+import { Brain, Zap, ArrowLeft, Settings, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMediaQuery, isMobileMQ } from '@/lib/useMediaQuery';
 
 function getDateLabel(dateStr) {
@@ -25,6 +25,23 @@ export default function UnifiedSidebar({ sessions, currentSessionId, onSelectSes
   const router = useRouter();
   const isMobile = useMediaQuery(isMobileMQ);
   const [open, setOpen] = useState(false);
+
+  // Read collapsed state from localStorage (only in desktop)
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsCollapsed(localStorage.getItem('tutor_sidebar_collapsed') === 'true');
+    }
+  }, []);
+
+  const toggleCollapse = () => {
+    const nextState = !isCollapsed;
+    setIsCollapsed(nextState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tutor_sidebar_collapsed', String(nextState));
+    }
+  };
 
   const grouped = useMemo(() => {
     const groups = {};
@@ -59,19 +76,52 @@ export default function UnifiedSidebar({ sessions, currentSessionId, onSelectSes
 
   const sidebarContent = (
     <div style={{
-      width: isMobile ? 260 : 240, minHeight: isMobile ? '100%' : '100vh',
+      width: isMobile ? 260 : (isCollapsed ? 70 : 240), minHeight: isMobile ? '100%' : '100vh',
       background: T.s1, borderRight: `1px solid ${T.border}`,
       display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '100%' : undefined,
+      position: 'relative', transition: 'width 0.2s ease'
     }}>
-      <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${T.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      {/* Floating Toggle Button (Desktop only) */}
+      {!isMobile && (
+        <button
+          onClick={toggleCollapse}
+          style={{
+            position: 'absolute',
+            top: 24,
+            right: -12,
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: T.s1,
+            border: `1px solid ${T.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: T.muted,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            zIndex: 100,
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = T.accent}
+          onMouseLeave={e => e.currentTarget.style.color = T.muted}
+          title={isCollapsed ? "Expand History" : "Collapse History"}
+        >
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+      )}
+
+      {/* Header Area */}
+      <div style={{ padding: isCollapsed && !isMobile ? '18px 10px 14px' : '18px 16px 14px', borderBottom: `1px solid ${T.border}` }}>
+        {/* Back Button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: (isCollapsed && !isMobile) ? 'center' : 'space-between', marginBottom: 12 }}>
           <button onClick={handleBack} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             background: 'none', border: 'none', color: T.muted, cursor: 'pointer',
             fontSize: 12, padding: 0, fontFamily: 'inherit',
-          }}>
+          }} title="Back to Home">
             <ArrowLeft size={14} />
-            <span>Back to Home</span>
+            {(!isCollapsed || isMobile) && <span>Back to Home</span>}
           </button>
           {isMobile && (
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', padding: 4 }}>
@@ -79,42 +129,71 @@ export default function UnifiedSidebar({ sessions, currentSessionId, onSelectSes
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: `${T.purple}22`, border: `1px solid ${T.purple}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+        {/* Brand/Title */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: (isCollapsed && !isMobile) ? 'center' : 'flex-start', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: `${T.purple}22`, border: `1px solid ${T.purple}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} title="Tutor History">
             <Brain size={16} color={T.purple} />
           </div>
-          <div>
-            <div style={{ color: T.text, fontWeight: 700, fontSize: 14, letterSpacing: '-0.02em' }}>LMS AI</div>
-            <div style={{ color: T.muted, fontSize: 10 }}>Tutor History</div>
-          </div>
+          {(!isCollapsed || isMobile) && (
+            <div>
+              <div style={{ color: T.text, fontWeight: 700, fontSize: 14, letterSpacing: '-0.02em' }}>LMS AI</div>
+              <div style={{ color: T.muted, fontSize: 10 }}>Tutor History</div>
+            </div>
+          )}
         </div>
       </div>
 
-      <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
+      {/* Session Navigation */}
+      <nav style={{ flex: 1, padding: isCollapsed && !isMobile ? '12px 6px' : '12px 10px', overflowY: 'auto' }}>
         {orderedGroups.map((group) => {
           const items = grouped[group];
           if (!items || items.length === 0) return null;
           return (
             <div key={group} style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: T.dim, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '0 6px', marginBottom: 6 }}>{group}</div>
+              {(!isCollapsed || isMobile) && (
+                <div style={{ fontSize: 10, color: T.dim, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '0 6px', marginBottom: 6 }}>
+                  {group}
+                </div>
+              )}
               {items.map((session) => {
                 const isActive = session.id === currentSessionId;
                 const isVoice = session.type === 'voice';
                 return (
-                  <button key={session.type + '-' + session.id} onClick={() => handleSelect(session)} style={{
-                    width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none',
-                    background: isActive ? `${T.accent}15` : 'transparent',
-                    color: isActive ? T.text : T.muted, cursor: 'pointer', fontSize: 12,
-                    display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit', transition: 'all 0.15s',
-                  }}
+                  <button
+                    key={session.type + '-' + session.id}
+                    onClick={() => handleSelect(session)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: isActive ? `${T.accent}15` : 'transparent',
+                      color: isActive ? T.text : T.muted,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: (isCollapsed && !isMobile) ? 'center' : 'flex-start',
+                      gap: 8,
+                      fontFamily: 'inherit',
+                      transition: 'all 0.15s',
+                    }}
+                    title={session.label || 'Untitled'}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = T.s2; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
                     <span style={{ width: 20, height: 20, borderRadius: 6, background: isVoice ? `${T.accent}20` : `${T.purple}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {isVoice ? <Zap size={11} color={T.accent} /> : <Brain size={11} color={T.purple} />}
                     </span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isActive ? 600 : 400, flex: 1 }}>{session.label || 'Untitled'}</span>
-                    <span style={{ fontSize: 9, color: T.dim, flexShrink: 0 }}>{isVoice ? 'Voice' : 'Text'}</span>
+                    {(!isCollapsed || isMobile) && (
+                      <>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isActive ? 600 : 400, flex: 1 }}>
+                          {session.label || 'Untitled'}
+                        </span>
+                        <span style={{ fontSize: 9, color: T.dim, flexShrink: 0 }}>{isVoice ? 'Voice' : 'Text'}</span>
+                      </>
+                    )}
                   </button>
                 );
               })}
@@ -122,12 +201,16 @@ export default function UnifiedSidebar({ sessions, currentSessionId, onSelectSes
           );
         })}
         {(!sessions || sessions.length === 0) && (
-          <div style={{ color: T.dim, fontSize: 11, textAlign: 'center', padding: '24px 0' }}>No sessions yet</div>
+          <div style={{ color: T.dim, fontSize: 11, textAlign: 'center', padding: '24px 0' }}>
+            {isCollapsed && !isMobile ? '—' : 'No sessions yet'}
+          </div>
         )}
       </nav>
 
-      <div style={{ padding: '12px 18px', borderTop: `1px solid ${T.border}` }}>
+      {/* Settings Area */}
+      <div style={{ padding: '12px 18px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: (isCollapsed && !isMobile) ? 'center' : 'flex-start' }}>
         <button style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', color: T.muted, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+          title="Settings"
           onMouseEnter={e => { e.currentTarget.style.background = T.s2; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
           <Settings size={14} />

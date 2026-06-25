@@ -84,6 +84,9 @@ export default function CodingTutor() {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          pre({ node, children }) {
+            return <div style={{ margin: 0, padding: 0 }}>{children}</div>;
+          },
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
             const isPython = match && match[1] === 'python';
@@ -91,11 +94,12 @@ export default function CodingTutor() {
 
             if (!inline && isPython) {
               return (
-                <div style={{ position: 'relative', margin: '12px 0' }}>
+                <div style={{ position: 'relative', margin: 0, padding: 0 }}>
                   {mounted ? (
                     <CodeMirror
                       value={codeVal}
                       theme="dark"
+                      className="tutor-code-block"
                       extensions={[python()]}
                       readOnly
                       editable={false}
@@ -108,7 +112,7 @@ export default function CodingTutor() {
                       style={{ fontSize: 13, fontFamily: 'monospace', borderRadius: 8, overflow: 'hidden' }}
                     />
                   ) : (
-                    <pre className={className} {...props} style={{ margin: 0 }}>
+                    <pre className={className} {...props} style={{ margin: 0, padding: 0 }}>
                       <code>{children}</code>
                     </pre>
                   )}
@@ -167,6 +171,42 @@ export default function CodingTutor() {
   const isMobile = useMediaQuery(isMobileMQ);
   const isTabletOrSmallDesktop = useMediaQuery('(max-width: 1150px)');
   
+  const [chatWidthPercent, setChatWidthPercent] = useState(55);
+  const isDraggingRef = useRef(false);
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const container = document.getElementById('tutor-workspace-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const relativeX = e.clientX - rect.left;
+      let newPercent = (relativeX / rect.width) * 100;
+      if (newPercent < 30) newPercent = 30;
+      if (newPercent > 70) newPercent = 70;
+      setChatWidthPercent(newPercent);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  };
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   const rPad = isMobile ? 14 : 28;
   const rGap = isMobile ? 8 : 12;
   const msgMaxW = '100%';
@@ -561,11 +601,12 @@ export default function CodingTutor() {
             showMenuButton={false}
           />
         )}
-        <div style={{ flex: 1, display: 'flex', flexDirection: showVerticalSplit ? 'column' : 'row', overflow: 'hidden' }}>
+        <div id="tutor-workspace-container" style={{ flex: 1, display: 'flex', flexDirection: showVerticalSplit ? 'column' : 'row', overflow: 'hidden' }}>
           
           {/* Chat Container */}
           <div style={{
-            flex: showSplitLayout ? 0.55 : (showVerticalSplit ? '0 0 50%' : 1),
+            width: showSplitLayout ? `${chatWidthPercent}%` : 'auto',
+            flex: showSplitLayout ? 'none' : (showVerticalSplit ? '0 0 50%' : 1),
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -947,9 +988,27 @@ export default function CodingTutor() {
             </div>
           </div>
 
+          {/* Draggable Divider (Desktop only) */}
+          {showSplitLayout && (
+            <div
+              onMouseDown={handleMouseDown}
+              style={{
+                width: '6px',
+                cursor: 'col-resize',
+                background: 'var(--border)',
+                alignSelf: 'stretch',
+                zIndex: 10,
+                transition: 'background 0.2s',
+                flexShrink: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--accent)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--border)'}
+            />
+          )}
+
           {/* Sandbox Playground (Desktop side-by-side) */}
           {showSplitLayout && (
-            <div style={{ flex: 0.45, height: '100%', background: '#090A0F', overflow: 'hidden' }}>
+            <div style={{ width: `${100 - chatWidthPercent}%`, flex: 'none', height: '100%', background: '#090A0F', overflow: 'hidden' }}>
               <Playground 
                 initialCode={`# Python Coding Sandbox\n# Write python code here and run it!\n\ndef greet(name):\n    print(f"Hello, {name}!")\n\ngreet("Seshu")\n`} 
                 codeOverride={codeOverride}
