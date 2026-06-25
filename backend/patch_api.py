@@ -306,6 +306,13 @@ try:
     @frappe.whitelist(allow_guest=True)
     def patched_login_via_google(code: str, state: str, **kwargs):
         try:
+            # Replace spaces with pluses to fix potential URL decoding issues
+            if code and " " in code:
+                code = code.replace(" ", "+")
+                
+            frappe.log_error(title="Google Login Attempted", message=f"Code: {code}, State: {state}, Kwargs: {kwargs}, Headers: {getattr(frappe.local, 'request', {}).get('headers', {}) if hasattr(frappe.local, 'request') else ''}")
+            frappe.db.commit()
+            
             res = orig_login_via_google(code, state)
             # Intercept successful Google login redirect and append the sid query parameter
             if frappe.local.response.get("type") == "redirect":
@@ -320,7 +327,7 @@ try:
             return res
         except Exception as e:
             import traceback
-            frappe.log_error(title="Google Login Failed", message=traceback.format_exc())
+            frappe.log_error(title="Google Login Failed", message=f"Traceback:\n{traceback.format_exc()}\n\nParams:\nCode: {code}\nState: {state}\nKwargs: {kwargs}")
             frappe.db.commit()
             
             # Determine redirect destination
