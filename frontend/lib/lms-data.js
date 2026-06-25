@@ -7,10 +7,10 @@ const darkT = {
 };
 
 const lightT = {
-  bg: "#F8F9FC", s1: "#FFFFFF", s2: "#F1F3F9", s3: "#E2E8F0",
-  border: "rgba(15, 23, 42, 0.08)", accent: "#1A73E8", green: "#137333",
-  purple: "#7048E8", amber: "#E37400", red: "#D93025",
-  text: "#0F172A", muted: "#475569", dim: "#94A3B8",
+  bg: "#F0F4F8", s1: "#FAFCFF", s2: "#E1EBF5", s3: "#D4E2F0",
+  border: "rgba(37, 99, 235, 0.09)", accent: "#2563EB", green: "#0D9488",
+  purple: "#7C3AED", amber: "#0891B2", red: "#DB2777",
+  text: "#0F1D30", muted: "#4B5E7D", dim: "#8CA2C0",
 };
 
 const currentTheme = (typeof window !== 'undefined' ? localStorage.getItem('theme') : null) || 'light';
