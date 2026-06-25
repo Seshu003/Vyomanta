@@ -310,7 +310,7 @@ try:
             if code and " " in code:
                 code = code.replace(" ", "+")
                 
-            frappe.log_error(title="Google Login Attempted", message=f"Code: {code}, State: {state}, Kwargs: {kwargs}, Headers: {getattr(frappe.local, 'request', {}).get('headers', {}) if hasattr(frappe.local, 'request') else ''}")
+            frappe.log_error(title="Google Login Attempted", message=f"Code: {code}\\nState: {state}\\nKwargs: {kwargs}")
             frappe.db.commit()
             
             res = orig_login_via_google(code, state)
