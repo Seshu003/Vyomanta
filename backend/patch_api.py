@@ -341,5 +341,44 @@ except Exception as patch_err:
         f.write(hooks_content.strip() + hooks_patch_code)
     print("✅ Patched apps/lms/lms/lms/hooks.py successfully!")
 
+    # 3. Patch apps/lms/lms/__init__.py (to mock missing video watch duration index patch)
+    init_path = '/home/frappe/frappe-bench/apps/lms/lms/__init__.py'
+    if os.path.exists(init_path):
+        with open(init_path, 'r') as f:
+            init_content = f.read()
+            
+        if 'add_video_watch_duration_index' not in init_content:
+            print("Injecting missing patch mock in apps/lms/lms/__init__.py...")
+            mock_code = """
+# MOCK MISSING VIDEO WATCH DURATION INDEX PATCH TO BYPASS STARTUP CRASH LOOP
+import sys
+from types import ModuleType
+import lms
+
+try:
+    import lms.patches
+except ImportError:
+    patches_mod = ModuleType("lms.patches")
+    sys.modules["lms.patches"] = patches_mod
+    lms.patches = patches_mod
+
+try:
+    import lms.patches.v2_0
+except ImportError:
+    v2_0_mod = ModuleType("lms.patches.v2_0")
+    sys.modules["lms.patches.v2_0"] = v2_0_mod
+    lms.patches.v2_0 = v2_0_mod
+
+missing_patch_name = "lms.patches.v2_0.add_video_watch_duration_index"
+if missing_patch_name not in sys.modules:
+    dummy_patch = ModuleType(missing_patch_name)
+    dummy_patch.execute = lambda: None
+    sys.modules[missing_patch_name] = dummy_patch
+    setattr(lms.patches.v2_0, "add_video_watch_duration_index", dummy_patch)
+"""
+            with open(init_path, 'w') as f:
+                f.write(init_content.strip() + "\n" + mock_code)
+            print("✅ Patched apps/lms/lms/__init__.py successfully with patch mock!")
+
 if __name__ == '__main__':
     main()
