@@ -327,7 +327,7 @@ try:
             return res
         except Exception as e:
             import traceback
-            frappe.log_error(title="Google Login Failed", message=f"Traceback:\n{traceback.format_exc()}\n\nParams:\nCode: {code}\nState: {state}\nKwargs: {kwargs}")
+            frappe.log_error(title="Google Login Failed", message=f"Traceback:\\n{traceback.format_exc()}\\n\\nParams:\\nCode: {code}\\nState: {state}\\nKwargs: {kwargs}")
             frappe.db.commit()
             
             # Determine redirect destination
