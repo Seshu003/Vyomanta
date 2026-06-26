@@ -469,7 +469,7 @@ export default function Playground({
       {/* Editor & Bottom Panels (Vertical Flex) */}
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)' }}>
         {/* Code Editor Container */}
-        <div style={{ flex: 1.1, overflow: 'auto', background: '#0F172A' }}>
+        <div style={{ overflow: 'auto', background: '#0F172A' }}>
           <CodeMirror
             value={code}
             height="100%"
