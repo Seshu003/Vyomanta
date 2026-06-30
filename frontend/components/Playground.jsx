@@ -15,11 +15,25 @@ export default function Playground({
   initialCode = '# Write your Python code here\nprint("Hello World!")\n',
   codeOverride = null,
   explanationOverride = null,
-  onTraceComplete = null
+  onTraceComplete = null,
+  onCodeChange = null
 }) {
   const [code, setCode] = useState(initialCode);
   const [activeTab, setActiveTab] = useState('console');
   const [explanation, setExplanation] = useState('');
+
+  const handleCodeChange = (newCode) => {
+    setCode(newCode);
+    if (onCodeChange) {
+      onCodeChange(newCode);
+    }
+  };
+
+  useEffect(() => {
+    if (onCodeChange) {
+      onCodeChange(code);
+    }
+  }, []);
 
   useEffect(() => {
     if (explanationOverride !== null) {
@@ -126,7 +140,7 @@ export default function Playground({
   // Handle parent code overrides
   useEffect(() => {
     if (codeOverride !== null) {
-      setCode(codeOverride);
+      handleCodeChange(codeOverride);
       setActiveTab('visualizer');
       setIsTracing(true);
       setTraceData(null);
@@ -526,7 +540,7 @@ export default function Playground({
             height="100%"
             theme="dark"
             extensions={[python()]}
-            onChange={(value) => setCode(value)}
+            onChange={(value) => handleCodeChange(value)}
             onCreateEditor={(view) => {
               editorViewRef.current = view;
             }}

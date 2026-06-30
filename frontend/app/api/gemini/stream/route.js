@@ -3,7 +3,7 @@ import { streamText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { cacheGet, cacheSet, makeCacheKey } from '@/lib/cache';
 import { getRotatedKey } from '@/lib/keys';
-import { loadHistory, saveHistory, recall, buildMemoryContext } from '@/lib/memory';
+import { loadHistory, saveHistory, recall, buildMemoryContext, trackApiConsumption } from '@/lib/memory';
 
 export async function POST(request) {
   const { system, user, maxOutputTokens, sessionId, userId } = await request.json();
@@ -57,7 +57,10 @@ export async function POST(request) {
       temperature: 0.4,
       maxTokens: maxOutputTokens || 8192,
       onFinish({ text }) {
-        if (text) cacheSet(cacheKey, text);
+        if (text) {
+          cacheSet(cacheKey, text);
+          trackApiConsumption(userId, user, text);
+        }
         // Save working memory asynchronously
         if (sessionId) {
           const updated = [

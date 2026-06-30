@@ -109,6 +109,14 @@ export default function GeneralTutor() {
     } catch {}
   }, []);
 
+  // Auto-resize the input textarea height
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`;
+    }
+  }, [topic]);
+
   // Save currentSessionId to localStorage
   useEffect(() => {
     if (currentSessionId) {

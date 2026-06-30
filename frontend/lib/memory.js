@@ -84,3 +84,134 @@ export function buildMemoryContext(history, memories) {
   }
   return ctx;
 }
+
+import fs from 'fs';
+import path from 'path';
+
+export async function trackApiConsumption(userId, promptText, responseText) {
+  const promptTokens = Math.ceil((promptText || '').length / 4);
+  const responseTokens = Math.ceil((responseText || '').length / 4);
+  const totalTokens = promptTokens + responseTokens;
+
+  // 1. Redis increment
+  const r = getRedis();
+  if (r && userId) {
+    try {
+      await Promise.all([
+        r.hincrby('gemini:api_calls', userId, 1),
+        r.hincrby('gemini:tokens_consumed', userId, totalTokens),
+        r.incrby('gemini:global:api_calls', 1),
+        r.incrby('gemini:global:tokens_consumed', totalTokens)
+      ]);
+      console.warn(`[Memory] trackApiConsumption (Redis) for ${userId}: +${totalTokens} tokens`);
+    } catch (e) {
+      console.warn(`[Memory] trackApiConsumption Redis error: ${e.message}`);
+    }
+  }
+
+  // 2. Local File fallback
+  try {
+    const dirPath = path.join(process.cwd(), 'lib');
+    const filePath = path.join(dirPath, 'api_consumption.json');
+    let data = { api_calls: {}, tokens_consumed: {}, global_api_calls: 0, global_tokens_consumed: 0 };
+    
+    if (fs.existsSync(filePath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } catch (err) {
+        console.warn(`[Memory] Reading api_consumption.json failed, resetting`, err);
+      }
+    } else {
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+    }
+    
+    const uid = userId || 'anonymous';
+    data.api_calls[uid] = (data.api_calls[uid] || 0) + 1;
+    data.tokens_consumed[uid] = (data.tokens_consumed[uid] || 0) + totalTokens;
+    data.global_api_calls = (data.global_api_calls || 0) + 1;
+    data.global_tokens_consumed = (data.global_tokens_consumed || 0) + totalTokens;
+    
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    console.warn(`[Memory] trackApiConsumption (Local File) for ${uid}: +${totalTokens} tokens`);
+  } catch (e) {
+    console.warn(`[Memory] trackLocalConsumption error: ${e.message}`);
+  }
+}
+
+export async function getApiConsumptionStats() {
+  const r = getRedis();
+  let stats = {
+    global_api_calls: 0,
+    global_tokens_consumed: 0,
+    users: []
+  };
+
+  if (r) {
+    try {
+      const [globalCalls, globalTokens, callsHash, tokensHash] = await Promise.all([
+        r.get('gemini:global:api_calls'),
+        r.get('gemini:global:tokens_consumed'),
+        r.hgetall('gemini:api_calls'),
+        r.hgetall('gemini:tokens_consumed')
+      ]);
+
+      if (globalCalls) stats.global_api_calls = parseInt(globalCalls);
+      if (globalTokens) stats.global_tokens_consumed = parseInt(globalTokens);
+
+      const usersMap = {};
+      if (callsHash) {
+        for (const [uid, count] of Object.entries(callsHash)) {
+          usersMap[uid] = { userId: uid, api_calls: parseInt(count), tokens_consumed: 0 };
+        }
+      }
+      if (tokensHash) {
+        for (const [uid, tokens] of Object.entries(tokensHash)) {
+          if (!usersMap[uid]) {
+            usersMap[uid] = { userId: uid, api_calls: 0, tokens_consumed: parseInt(tokens) };
+          } else {
+            usersMap[uid].tokens_consumed = parseInt(tokens);
+          }
+        }
+      }
+      stats.users = Object.values(usersMap).sort((a, b) => b.tokens_consumed - a.tokens_consumed);
+      
+      if (stats.global_api_calls > 0) {
+        return stats;
+      }
+    } catch (e) {
+      console.warn(`[Memory] getApiConsumptionStats Redis error, trying file fallback: ${e.message}`);
+    }
+  }
+
+  try {
+    const filePath = path.join(process.cwd(), 'lib', 'api_consumption.json');
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      stats.global_api_calls = data.global_api_calls || 0;
+      stats.global_tokens_consumed = data.global_tokens_consumed || 0;
+      
+      const usersMap = {};
+      if (data.api_calls) {
+        for (const [uid, count] of Object.entries(data.api_calls)) {
+          usersMap[uid] = { userId: uid, api_calls: count, tokens_consumed: 0 };
+        }
+      }
+      if (data.tokens_consumed) {
+        for (const [uid, tokens] of Object.entries(data.tokens_consumed)) {
+          if (!usersMap[uid]) {
+            usersMap[uid] = { userId: uid, api_calls: 0, tokens_consumed: tokens };
+          } else {
+            usersMap[uid].tokens_consumed = tokens;
+          }
+        }
+      }
+      stats.users = Object.values(usersMap).sort((a, b) => b.tokens_consumed - a.tokens_consumed);
+    }
+  } catch (e) {
+    console.warn(`[Memory] getApiConsumptionStats file reading error: ${e.message}`);
+  }
+
+  return stats;
+}

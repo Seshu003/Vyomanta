@@ -23,6 +23,11 @@ export default function AdminStatisticsPage() {
   const [topCoursesList, setTopCoursesList] = useState([]);
   const [maxVal, setMaxVal] = useState(9);
 
+  // AI Consumption Stats state
+  const [globalApiCalls, setGlobalApiCalls] = useState(0);
+  const [globalTokensConsumed, setGlobalTokensConsumed] = useState(0);
+  const [consumptionUsers, setConsumptionUsers] = useState([]);
+
   // SVG Line Chart dimension constants
   const width = 520;
   const height = 140;
@@ -55,6 +60,19 @@ export default function AdminStatisticsPage() {
           }
         } catch (e) {
           console.error("Failed to load student progress from API:", e);
+        }
+
+        // Fetch AI api consumption statistics
+        try {
+          const res = await fetch('/api/admin/api-consumption');
+          if (res.ok) {
+            const data = await res.json();
+            setGlobalApiCalls(data.global_api_calls || 0);
+            setGlobalTokensConsumed(data.global_tokens_consumed || 0);
+            setConsumptionUsers(data.users || []);
+          }
+        } catch (e) {
+          console.error("Failed to load api consumption data:", e);
         }
 
         // Seed default completions if not set so there are initial progress values
@@ -566,6 +584,64 @@ export default function AdminStatisticsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* AI Consumption Metrics Card */}
+          <div style={{
+            background: T.s1,
+            border: `1px solid ${T.border}`,
+            borderRadius: 14,
+            padding: 20,
+            marginTop: 28
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, color: T.text, fontSize: 14.5, fontWeight: 700 }}>AI Tutor Token Consumption</h3>
+                <p style={{ margin: '2px 0 0 0', color: T.muted, fontSize: 11.5 }}>Gemini API calls and token counts per student (1 token ≈ 4 characters)</p>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ padding: '4px 10px', background: `${T.purple}12`, border: `1px solid ${T.purple}30`, borderRadius: 10, fontSize: 12 }}>
+                  <span style={{ color: T.muted }}>Total Calls: </span><strong style={{ color: T.purple }}>{globalApiCalls}</strong>
+                </div>
+                <div style={{ padding: '4px 10px', background: `${T.green}12`, border: `1px solid ${T.green}30`, borderRadius: 10, fontSize: 12 }}>
+                  <span style={{ color: T.muted }}>Total Tokens: </span><strong style={{ color: T.green }}>{globalTokensConsumed.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
+
+            {consumptionUsers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: T.muted, fontSize: 13 }}>
+                No AI calls recorded yet. Try conversing with the General or Coding Tutor!
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 600 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${T.border}`, color: T.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <th style={{ padding: '10px 14px', fontWeight: 600 }}>Student Identifier</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600 }}>API Calls Count</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600 }}>Tokens Consumed</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600, textAlign: 'right' }}>Est. Cost (Free Tier API)</th>
+                    </tr>
+                  </thead>
+                  <tbody style={{ fontSize: 13 }}>
+                    {consumptionUsers.map((user, idx) => (
+                      <tr key={user.userId} style={{
+                        borderBottom: idx === consumptionUsers.length - 1 ? 'none' : `1px solid ${T.border}`,
+                        transition: 'background 0.2s'
+                      }}>
+                        <td style={{ padding: '14px', color: T.text, fontWeight: 600 }}>{user.userId}</td>
+                        <td style={{ padding: '14px', color: T.text, fontWeight: 500 }}>{user.api_calls} calls</td>
+                        <td style={{ padding: '14px', color: T.muted }}>
+                          <span style={{ color: T.text, fontWeight: 500 }}>{user.tokens_consumed.toLocaleString()}</span> tokens
+                        </td>
+                        <td style={{ padding: '14px', textAlign: 'right', color: T.green, fontWeight: 700 }}>$0.00 (Free)</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

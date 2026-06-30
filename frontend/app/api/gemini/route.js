@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cacheGet, cacheSet, makeCacheKey } from '@/lib/cache';
 import { getRotatedKey } from '@/lib/keys';
-import { loadHistory, saveHistory, recall, buildMemoryContext } from '@/lib/memory';
+import { loadHistory, saveHistory, recall, buildMemoryContext, trackApiConsumption } from '@/lib/memory';
 
 function calculateWait(error, baseDelay, attempt) {
   if (error?.details) {
@@ -105,6 +105,7 @@ export async function POST(request) {
         { role: 'assistant', content: text },
       ];
       saveHistory(sessionId, updated);
+      trackApiConsumption(userId, user, text);
     }
 
     return NextResponse.json({ text });

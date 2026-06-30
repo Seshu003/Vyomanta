@@ -16,6 +16,8 @@ import {
   buildChatPrompt, buildFeaturePrompt,
   parseQuizOutput, parseFlashcardsOutput, parseInfographicOutput,
   CODING_TUTOR_SYSTEM, TUTOR_SYSTEM, QUIZ_SYSTEM, FLASHCARD_SYSTEM, INFOGRAPHIC_SYSTEM, SIMPLER_SYSTEM, EXAMPLES_SYSTEM,
+  BUG_ANALYSIS_SYSTEM, BUG_TIPS_SYSTEM, BUG_FIX_METHODS_SYSTEM, FIX_EXPLANATION_SYSTEM, SOCRATIC_HELP_SYSTEM,
+  MODE_INSTRUCTIONS, detectPromptInjection,
   MAX_TOKENS, getTheme, setTheme
 } from '@/lib/lms-data';
 import MobileNav from '@/components/MobileNav';
@@ -58,6 +60,131 @@ const FEATURE_LABELS = {
   simpler: 'Simplified Explanation', examples: 'Code Examples',
 };
 
+const MENTION_OPTIONS = [
+  { id: 'analyze', name: 'analyze', label: 'Code Analysis & Complexity', desc: 'Detect bugs and estimate time/space Big O complexity', icon: '🔍', color: '#5B8CF8' },
+  { id: 'tips', name: 'tips', label: 'Bug Correction Tips', desc: 'Hints & correction tips without giving direct solutions', icon: '💡', color: '#22C5A0' },
+  { id: 'fix', name: 'fix', label: 'Bug Fixing Methods', desc: 'Possible fixing strategies & algorithms to resolve bugs', icon: '🛠️', color: '#9B6EF8' },
+  { id: 'explain', name: 'explain', label: 'Why It Works', desc: 'Theoretical explanation of why these fixes work', icon: '📖', color: '#F5A95B' },
+  { id: 'help', name: 'help', label: 'Interactive Guide', desc: 'Step-by-step Socratic helper guiding you to fix it', icon: '🤝', color: '#F55B6B' }
+];
+
+function parseAnalyticsFromMessage(msg) {
+  if (!msg || msg.role !== 'ai' || !msg.content) return null;
+  if (msg.analytics) return msg.analytics;
+  const analyticsRegex = /<analytics>([\s\S]*?)<\/analytics>/i;
+  const match = msg.content.match(analyticsRegex);
+  if (match) {
+    try {
+      return JSON.parse(match[1].trim());
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function renderAnalyticsCard(analytics) {
+  if (!analytics) return null;
+  const { timeComplexity, spaceComplexity, bugSeverity, optimizeScope, bugCount, dsaConcepts } = analytics;
+  
+  const getSeverityColor = (sev) => {
+    const s = String(sev).toLowerCase();
+    if (s === 'high') return T.red;
+    if (s === 'medium') return T.amber;
+    if (s === 'low') return T.accent;
+    return T.green;
+  };
+  
+  const getOptimizeColor = (opt) => {
+    const o = String(opt).toLowerCase();
+    if (o === 'high') return T.amber;
+    if (o === 'medium') return T.accent;
+    if (o === 'low') return T.purple;
+    return T.green;
+  };
+
+  const sevColor = getSeverityColor(bugSeverity);
+  const optColor = getOptimizeColor(optimizeScope);
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${T.s2}cc, ${T.s1}aa)`,
+      border: `1px solid ${T.border}`,
+      borderRadius: 14,
+      padding: '16px 20px',
+      marginBottom: 16,
+      boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, paddingBottom: 10, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 16 }}>📊</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.text, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Code Analysis Metrics
+          </span>
+        </div>
+        {bugCount !== undefined && (
+          <div style={{
+            background: bugCount > 0 ? `${T.red}18` : `${T.green}18`,
+            border: `1px solid ${bugCount > 0 ? T.red + '40' : T.green + '40'}`,
+            borderRadius: 20,
+            padding: '2px 10px',
+            fontSize: 11,
+            fontWeight: 700,
+            color: bugCount > 0 ? T.red : T.green
+          }}>
+            {bugCount > 0 ? `${bugCount} Bugs Detected` : 'No Bugs Detected'}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+        <div style={{ background: T.s3, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: 10, color: T.muted, fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Time Complexity</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.amber }}>{timeComplexity || 'N/A'}</div>
+        </div>
+        
+        <div style={{ background: T.s3, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: 10, color: T.muted, fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Space Complexity</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.purple }}>{spaceComplexity || 'N/A'}</div>
+        </div>
+
+        <div style={{ background: T.s3, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: 10, color: T.muted, fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Bug Severity</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: sevColor }}>{bugSeverity || 'None'}</div>
+        </div>
+
+        <div style={{ background: T.s3, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: 10, color: T.muted, fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Optimize Scope</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: optColor }}>{optimizeScope || 'None'}</div>
+        </div>
+      </div>
+
+      {dsaConcepts && dsaConcepts.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+          <span style={{ fontSize: 10.5, color: T.muted, fontWeight: 600 }}>DSA Concepts:</span>
+          {dsaConcepts.map((concept, idx) => (
+            <span key={concept + idx} style={{
+              background: `${T.accent}12`,
+              border: `1px solid ${T.accent}30`,
+              color: T.accent,
+              borderRadius: 6,
+              padding: '1px 8px',
+              fontSize: 10.5,
+              fontWeight: 600
+            }}>
+              {concept}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CodingTutor() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -83,6 +210,27 @@ export default function CodingTutor() {
   
   const [codeOverride, setCodeOverride] = useState(null);
   const [explanationOverride, setExplanationOverride] = useState(null);
+
+  const [currentSandboxCode, setCurrentSandboxCode] = useState('');
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+
+  const filteredMentions = useMemo(() => {
+    return MENTION_OPTIONS.filter(opt =>
+      opt.name.startsWith(mentionSearch.toLowerCase())
+    );
+  }, [mentionSearch]);
+
+  const handleSelectMention = (option) => {
+    const textBefore = topic.slice(0, topic.lastIndexOf('@'));
+    const newText = `${textBefore}@${option.name} `;
+    setTopic(newText);
+    setShowMentionDropdown(false);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
 
   const handleVisualizeCode = (codeText, explanationText) => {
     setIsPlaygroundOpen(true);
@@ -247,6 +395,14 @@ export default function CodingTutor() {
     } catch {}
   }, []);
 
+  // Auto-resize the input textarea height
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`;
+    }
+  }, [topic]);
+
   // Save currentSessionId to localStorage
   useEffect(() => {
     if (currentSessionId) {
@@ -350,9 +506,23 @@ export default function CodingTutor() {
     const sid = currentSessionId || Date.now().toString(36);
     if (!currentSessionId) setCurrentSessionId(sid);
 
-    const intent = classifyIntent(raw);
     const userMsg = { id: Date.now().toString(36), role: 'user', content: raw, mode, length };
     const msgsWithUser = [...messages, userMsg];
+
+    if (detectPromptInjection(raw)) {
+      const aiMsg = { 
+        id: (Date.now() + 1).toString(36), 
+        role: 'ai', 
+        content: "⚠️ **Security Notice**: Your input was flagged as a potential prompt injection attempt or policy violation. To protect our free Gemini API tokens, please only enter programming-related queries.", 
+        local: true, 
+        features: {} 
+      };
+      const next = [...msgsWithUser, aiMsg];
+      setMessages(next); saveSession(next, sid);
+      return;
+    }
+
+    const intent = classifyIntent(raw);
 
     if (intent.type === 'greeting') {
       const aiMsg = { id: (Date.now() + 1).toString(36), role: 'ai', content: getGreetingResponse(), local: true, features: {} };
@@ -425,12 +595,65 @@ export default function CodingTutor() {
     setLoading(true);
 
     try {
-      const tokens = MAX_TOKENS[length.toLowerCase()] || 800;
-      const prompt = buildChatPrompt(raw, mode, length);
+      let systemPrompt = CODING_TUTOR_SYSTEM;
+      let finalPrompt = "";
+      const baseTokens = MAX_TOKENS[length.toLowerCase()] || 800;
+      let tokens = baseTokens;
+
+      const mentionMatch = raw.match(/^@(analyze|tips|fix|explain|help)\b([\s\S]*)/i);
+      if (mentionMatch) {
+        const cmd = mentionMatch[1].toLowerCase();
+        const userText = mentionMatch[2].trim();
+
+        if (cmd === 'analyze') {
+          systemPrompt = BUG_ANALYSIS_SYSTEM;
+          tokens = baseTokens + 300;
+        } else if (cmd === 'tips') {
+          systemPrompt = BUG_TIPS_SYSTEM;
+        } else if (cmd === 'fix') {
+          systemPrompt = BUG_FIX_METHODS_SYSTEM;
+        } else if (cmd === 'explain') {
+          systemPrompt = FIX_EXPLANATION_SYSTEM;
+        } else if (cmd === 'help') {
+          systemPrompt = SOCRATIC_HELP_SYSTEM;
+        }
+
+        let targetCode = "";
+        const codeBlockMatch = userText.match(/```python[\s\S]*?```/i) || userText.match(/```[\s\S]*?```/i);
+        if (codeBlockMatch) {
+          targetCode = codeBlockMatch[0];
+        } else if (currentSandboxCode && currentSandboxCode.trim()) {
+          targetCode = currentSandboxCode.trim();
+        }
+
+        finalPrompt = "";
+        if (targetCode) {
+          finalPrompt += `Here is the code context to work with:\n\`\`\`python\n${targetCode}\n\`\`\`\n\n`;
+        }
+        finalPrompt += `User request: ${userText || "Please perform this action on the code."}\n\n`;
+        
+        const modeInst = MODE_INSTRUCTIONS[mode] || '';
+        const lenKey = length.toLowerCase();
+        const lenInst = LENGTH_INSTRUCTIONS[lenKey] || '';
+        
+        let extraLenGuideline = "";
+        if (lenKey === 'short') {
+          extraLenGuideline = "\n- Keep your output extremely brief and direct. Pinpoint the bug or explain the concept immediately in 1-2 simple sentences or minimal bullet points. Avoid any generic introduction or long-winded text.";
+        } else if (lenKey === 'medium') {
+          extraLenGuideline = "\n- Keep your output moderate in size, balancing clear explanations with concise code examples.";
+        } else if (lenKey === 'deep') {
+          extraLenGuideline = "\n- Provide a comprehensive, in-depth analysis covering all nuances, advanced optimization strategies, edge cases, and step-by-step breakdowns.";
+        }
+
+        finalPrompt += `Mode: ${mode}\n${modeInst}\n\nLength Level: ${length}\n${lenInst}${extraLenGuideline}`;
+      } else {
+        finalPrompt = buildChatPrompt(raw, mode, length);
+      }
+
       const res = await fetch('/api/gemini/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system: CODING_TUTOR_SYSTEM, user: prompt, maxOutputTokens: tokens, sessionId: sid, userId }),
+        body: JSON.stringify({ system: systemPrompt, user: finalPrompt, maxOutputTokens: tokens, sessionId: sid, userId }),
       });
       if (!res.ok) {
         let errMsg = `HTTP ${res.status}`;
@@ -445,14 +668,36 @@ export default function CodingTutor() {
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
         if (streamElRef.current) {
-          const match = fullText.match(/([\s\S]*?```python[\s\S]*?```)([\s\S]*)/);
-          streamElRef.current.textContent = match ? match[1] : fullText;
+          let displayStream = fullText.replace(/<analytics>[\s\S]*?<\/analytics>/i, '');
+          if (displayStream.includes('<analytics>')) {
+            displayStream = displayStream.split('<analytics>')[0];
+          }
+          const match = displayStream.match(/([\s\S]*?```python[\s\S]*?```)([\s\S]*)/);
+          streamElRef.current.textContent = match ? match[1] : displayStream;
         }
       }
       if (!fullText.trim()) {
         throw new Error('Gemini returned an empty response. If you asked an off-topic question, please note I can only help with programming-related topics.');
       }
-      const aiMsg = { id: (Date.now() + 1).toString(36), role: 'ai', content: fullText, features: {} };
+
+      const analyticsRegex = /<analytics>([\s\S]*?)<\/analytics>/i;
+      const analyticsMatch = fullText.match(analyticsRegex);
+      let parsedAnalytics = null;
+      if (analyticsMatch) {
+        try {
+          parsedAnalytics = JSON.parse(analyticsMatch[1].trim());
+        } catch (e) {
+          console.warn("Failed to parse analytics JSON:", e);
+        }
+      }
+
+      const aiMsg = { 
+        id: (Date.now() + 1).toString(36), 
+        role: 'ai', 
+        content: fullText, 
+        features: {},
+        analytics: parsedAnalytics
+      };
       const next = [...msgsWithUser, aiMsg];
       setMessages(next);
       setStreamingText('');
@@ -638,6 +883,29 @@ export default function CodingTutor() {
   };
 
   const handleKeyDown = (e) => {
+    if (showMentionDropdown && filteredMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev + 1) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleSelectMention(filteredMentions[selectedMentionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -728,8 +996,12 @@ export default function CodingTutor() {
               {/* Chat Thread */}
               {messages.map((msg, mi) => {
                 const isAi = msg.role === 'ai';
-                const match = isAi && msg.content ? msg.content.match(/([\s\S]*?```python[\s\S]*?```)([\s\S]*)/) : null;
-                const chatContent = match ? match[1] : msg.content;
+                let displayContent = msg.content || '';
+                const analyticsRegex = /<analytics>[\s\S]*?<\/analytics>/i;
+                displayContent = displayContent.replace(analyticsRegex, '').trim();
+
+                const match = isAi && displayContent ? displayContent.match(/([\s\S]*?```python[\s\S]*?```)([\s\S]*)/) : null;
+                const chatContent = match ? match[1] : displayContent;
                 const explanation = match ? match[2].trim() : '';
 
                 return (
@@ -756,6 +1028,10 @@ export default function CodingTutor() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 11, color: T.amber, fontWeight: 700, letterSpacing: '0.05em', marginBottom: 4 }}>CODING TUTOR</div>
+                          
+                          {/* Visual Analytics Card */}
+                          {parseAnalyticsFromMessage(msg) && renderAnalyticsCard(parseAnalyticsFromMessage(msg))}
+
                           <div style={{ color: T.text, fontSize: 14, lineHeight: 1.7 }}>
                             <div className="md-content">
                               {renderMarkdown(chatContent, explanation)}
@@ -1021,12 +1297,77 @@ export default function CodingTutor() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 8, background: T.s2, border: `1px solid ${T.border}`, borderRadius: 12, padding: '10px 14px' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 8, background: T.s2, border: `1px solid ${T.border}`, borderRadius: 12, padding: '10px 14px', position: 'relative' }}>
                   <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: '2px', display: 'flex', alignItems: 'center' }}>
                     <Paperclip size={16} />
                   </button>
-                  <textarea ref={inputRef} value={topic} onChange={e => setTopic(e.target.value)}
-                    placeholder="Ask Coding Tutor (restricted to programming topics)..." rows={1}
+
+                  {/* Autocomplete Dropdown popup */}
+                  {showMentionDropdown && filteredMentions.length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      left: 0,
+                      right: 0,
+                      background: T.s3,
+                      border: `1px solid ${T.border}`,
+                      borderRadius: 12,
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)',
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                      zIndex: 100,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '6px 0'
+                    }}>
+                      <div style={{ fontSize: 10, color: T.muted, fontWeight: 700, letterSpacing: '0.05em', padding: '6px 14px 4px', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}`, marginBottom: 4 }}>
+                        Coding Tutor Commands
+                      </div>
+                      {filteredMentions.map((opt, idx) => {
+                        const isSelected = idx === selectedMentionIndex;
+                        return (
+                          <div
+                            key={opt.id}
+                            onClick={() => handleSelectMention(opt)}
+                            onMouseEnter={() => setSelectedMentionIndex(idx)}
+                            style={{
+                              padding: '8px 14px',
+                              background: isSelected ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                              borderLeft: `3px solid ${isSelected ? opt.color : 'transparent'}`,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span style={{ fontSize: 16 }}>{opt.icon}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontWeight: 700, color: opt.color, fontSize: 12.5 }}>@{opt.name}</span>
+                                <span style={{ fontWeight: 600, color: T.text, fontSize: 12 }}>{opt.label}</span>
+                              </div>
+                              <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{opt.desc}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <textarea ref={inputRef} value={topic} onChange={e => {
+                      const val = e.target.value;
+                      setTopic(val);
+                      const match = val.match(/@(\w*)$/);
+                      if (match) {
+                        setMentionSearch(match[1]);
+                        setShowMentionDropdown(true);
+                        setSelectedMentionIndex(0);
+                      } else {
+                        setShowMentionDropdown(false);
+                      }
+                    }}
+                    placeholder="Ask Coding Tutor (type @ for commands)..." rows={1}
                     onKeyDown={handleKeyDown}
                     style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, lineHeight: 1.6, resize: 'none', fontFamily: 'inherit', padding: 0, minHeight: 22, maxHeight: 120 }} />
                 </div>
@@ -1067,6 +1408,7 @@ export default function CodingTutor() {
                   setCodeOverride(null);
                   setExplanationOverride(null);
                 }}
+                onCodeChange={setCurrentSandboxCode}
               />
             </div>
           )}
@@ -1082,6 +1424,7 @@ export default function CodingTutor() {
                   setCodeOverride(null);
                   setExplanationOverride(null);
                 }}
+                onCodeChange={setCurrentSandboxCode}
               />
             </div>
           )}
