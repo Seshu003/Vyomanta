@@ -387,7 +387,7 @@ export default function Playground({
 
           if (isArray) {
             return (
-              <div key={key} style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+              <div key={key} className="variable-card" style={{ background: '#0D111A', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: 8, padding: 12 }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>{key} (List)</div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   {val.map((item, idx) => (
@@ -398,8 +398,8 @@ export default function Playground({
                         height: 32,
                         padding: '0 6px',
                         borderRadius: 6,
-                        background: 'var(--s3)',
-                        border: `1px solid var(--accent)40`,
+                        background: '#161B26',
+                        border: `1px solid rgba(91, 140, 248, 0.25)`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -418,11 +418,11 @@ export default function Playground({
 
           if (isDict) {
             return (
-              <div key={key} style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+              <div key={key} className="variable-card" style={{ background: '#0D111A', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: 8, padding: 12 }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>{key} (Dict)</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {Object.entries(val).map(([k, v]) => (
-                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid var(--border)`, padding: '3px 0' }}>
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid rgba(255, 255, 255, 0.05)`, padding: '3px 0' }}>
                       <span style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>{k}</span>
                       <span style={{ fontWeight: 600, color: 'var(--text)', fontFamily: 'monospace' }}>{String(v)}</span>
                     </div>
@@ -438,14 +438,15 @@ export default function Playground({
           return (
             <div
               key={key}
+              className="variable-card"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '8px 12px',
-                background: 'var(--s2)',
-                border: '1px solid var(--border)',
-                borderRadius: 10
+                background: '#0D111A',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: 8
               }}
             >
               <span style={{ fontWeight: 600, color: 'var(--muted)', fontSize: 12.5, fontFamily: 'monospace' }}>{key}</span>
@@ -462,17 +463,17 @@ export default function Playground({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      background: 'var(--s1)',
-      border: '1px solid var(--border)',
-      borderRadius: 14,
+      background: '#040508',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      borderRadius: 0,
       overflow: 'hidden',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
     }}>
       {/* Playground Header */}
       <div style={{
         padding: '12px 16px',
-        background: 'var(--s2)',
-        borderBottom: '1px solid var(--border)',
+        background: '#080A0E',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -545,7 +546,7 @@ export default function Playground({
         style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)', overflowY: 'auto' }}
       >
         {/* Code Editor Container */}
-        <div style={{ minHeight: 100, background: '#0F172A' }}>
+        <div style={{ minHeight: 100, background: '#06080C' }}>
           <CodeMirror
             value={code}
             theme="dark"
@@ -564,23 +565,23 @@ export default function Playground({
           style={{
             height: 5,
             cursor: 'row-resize',
-            background: 'var(--border)',
+            background: 'rgba(255, 255, 255, 0.08)',
             transition: 'background 0.2s',
             zIndex: 10,
             width: '100%',
             flexShrink: 0
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--accent)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'var(--border)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
         />
 
         {/* Tab Selection Header */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          background: 'var(--s2)',
-          borderTop: '1px solid var(--border)',
-          borderBottom: '1px solid var(--border)',
+          background: '#080A0E',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
           padding: '0 10px',
           height: 36,
           flexShrink: 0
@@ -588,7 +589,7 @@ export default function Playground({
           <button
             onClick={() => setActiveTab('console')}
             style={{
-              background: activeTab === 'console' ? 'var(--s3)' : 'transparent',
+              background: activeTab === 'console' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
               border: 'none',
               borderBottom: activeTab === 'console' ? `2px solid var(--accent)` : 'none',
               color: activeTab === 'console' ? 'var(--text)' : 'var(--muted)',
@@ -608,7 +609,7 @@ export default function Playground({
           <button
             onClick={() => setActiveTab('visualizer')}
             style={{
-              background: activeTab === 'visualizer' ? 'var(--s3)' : 'transparent',
+              background: activeTab === 'visualizer' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
               border: 'none',
               borderBottom: activeTab === 'visualizer' ? `2px solid var(--amber)` : 'none',
               color: activeTab === 'visualizer' ? 'var(--text)' : 'var(--muted)',
@@ -636,7 +637,7 @@ export default function Playground({
           <button
             onClick={() => setActiveTab('explanation')}
             style={{
-              background: activeTab === 'explanation' ? 'var(--s3)' : 'transparent',
+              background: activeTab === 'explanation' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
               border: 'none',
               borderBottom: activeTab === 'explanation' ? `2px solid var(--green)` : 'none',
               color: activeTab === 'explanation' ? 'var(--text)' : 'var(--muted)',
@@ -664,23 +665,24 @@ export default function Playground({
         </div>
 
         {/* Tab Content Area */}
-        <div style={{ height: panelHeight, flexGrow: 1, flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--s1)' }}>
+        <div style={{ height: panelHeight, flexGrow: 1, flexShrink: 0, position: 'relative', overflow: 'hidden', background: '#040508' }}>
           
           {/* Console Tab Content */}
           <div
             ref={terminalElRef}
+            className="tab-pane"
             style={{
               display: activeTab === 'console' ? 'block' : 'none',
               width: '100%',
               height: '100%',
               padding: '8px 12px',
               overflow: 'hidden',
-              background: '#090A0F'
+              background: '#040508'
             }}
           />
 
           {/* Visualizer Tab Content */}
-          <div style={{
+          <div className="tab-pane" style={{
             display: activeTab === 'visualizer' ? 'flex' : 'none',
             flexDirection: 'column',
             width: '100%',
@@ -711,8 +713,8 @@ export default function Playground({
                 {/* Media Player Controls */}
                 <div style={{
                   padding: '8px 16px',
-                  background: 'var(--s2)',
-                  borderBottom: `1px solid var(--border)`,
+                  background: '#080A0E',
+                  borderBottom: `1px solid rgba(255, 255, 255, 0.08)`,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
@@ -777,11 +779,11 @@ export default function Playground({
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                   
                   {/* Variable Visualizer Panel (Full Width) */}
-                  <div style={{
+                  <div className="sandbox-scroll" style={{
                     flex: 1,
                     overflowY: 'auto',
                     padding: 14,
-                    background: 'var(--s1)'
+                    background: '#040508'
                   }}>
                     <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>Local Variables Scope</div>
                     {renderVariables()}
@@ -795,13 +797,13 @@ export default function Playground({
           </div>
 
           {/* Explanation Tab Content */}
-          <div style={{
+          <div className="tab-pane sandbox-scroll" style={{
             display: activeTab === 'explanation' ? 'block' : 'none',
             width: '100%',
             height: '100%',
             padding: 16,
             overflowY: 'auto',
-            background: 'var(--s1)',
+            background: '#040508',
             color: 'var(--text)'
           }}>
             {!explanation && !isGeneratingExplanation ? (
@@ -854,6 +856,68 @@ export default function Playground({
 
         </div>
       </div>
+      <style>{`
+        /* CodeMirror deep obsidian override */
+        .cm-editor {
+          background-color: #06080C !important;
+        }
+        .cm-editor .cm-scroller {
+          background-color: #06080C !important;
+        }
+        .cm-gutters {
+          background-color: #06080C !important;
+          border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+          color: rgba(255, 255, 255, 0.3) !important;
+        }
+        .cm-activeLine {
+          background-color: rgba(91, 140, 248, 0.06) !important;
+        }
+        .cm-activeLineGutter {
+          background-color: rgba(91, 140, 248, 0.12) !important;
+          color: var(--accent) !important;
+        }
+        .cm-selectionBackground {
+          background: rgba(91, 140, 248, 0.22) !important;
+          border-radius: 2px;
+          animation: line-glow 1.5s infinite alternate;
+        }
+        
+        @keyframes line-glow {
+          0% { background: rgba(91, 140, 248, 0.16); box-shadow: inset 0 0 4px rgba(91, 140, 248, 0.15); }
+          100% { background: rgba(91, 140, 248, 0.28); box-shadow: inset 0 0 10px rgba(91, 140, 248, 0.3); }
+        }
+
+        /* Tab content transition */
+        .tab-pane {
+          animation: tab-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes tab-fade-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Staggered variable card slide-in */
+        .variable-card {
+          animation: card-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes card-enter {
+          from { opacity: 0; transform: scale(0.97) translateY(4px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        
+        /* Custom scrollbar override for dark theme */
+        .sandbox-scroll::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .sandbox-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12) !important;
+          border-radius: 4px;
+        }
+        .sandbox-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--accent) !important;
+        }
+      `}</style>
     </div>
   );
 }
