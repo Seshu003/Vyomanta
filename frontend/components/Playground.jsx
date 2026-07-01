@@ -534,7 +534,7 @@ export default function Playground({
         style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)', overflowY: 'auto' }}
       >
         {/* Code Editor Container */}
-        <div style={{ flex: '1 0 auto', minHeight: 100, background: '#0F172A' }}>
+        <div style={{ minHeight: 100, background: '#0F172A' }}>
           <CodeMirror
             value={code}
             theme="dark"
@@ -645,7 +645,7 @@ export default function Playground({
         </div>
 
         {/* Tab Content Area */}
-        <div style={{ height: panelHeight, flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--s1)' }}>
+        <div style={{ height: panelHeight, flexGrow: 1, flexShrink: 0, position: 'relative', overflow: 'hidden', background: 'var(--s1)' }}>
           
           {/* Console Tab Content */}
           <div
