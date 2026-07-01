@@ -534,7 +534,7 @@ export default function Playground({
         style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)', overflowY: 'auto' }}
       >
         {/* Code Editor Container */}
-        <div style={{ minHeight: 100, background: '#0F172A' }}>
+        <div style={{ flex: '1 0 auto', minHeight: 100, background: '#0F172A' }}>
           <CodeMirror
             value={code}
             theme="dark"
