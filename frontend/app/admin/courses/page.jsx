@@ -187,11 +187,17 @@ export default function AdminCoursesPage() {
 
   const handleDeleteCourse = async (id) => {
     if (confirm('Are you sure you want to delete this course?')) {
-      const success = await deleteCourse(id);
-      if (success) {
-        const fresh = await getCourses();
-        setCourses(fresh);
-        updateChecklist(fresh);
+      try {
+        const success = await deleteCourse(id);
+        if (success) {
+          const fresh = await getCourses();
+          setCourses(fresh);
+          updateChecklist(fresh);
+        } else {
+          alert('Failed to delete course.');
+        }
+      } catch (e) {
+        alert('Failed to delete course from database: ' + e.message);
       }
     }
   };

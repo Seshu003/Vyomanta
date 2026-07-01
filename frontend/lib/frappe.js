@@ -514,6 +514,7 @@ export async function updateCourse(id, courseData) {
 export async function deleteCourse(id) {
   invalidateCoursesCache();
   if (id) invalidateSyllabusCache(id);
+
   // Save to locally deleted list to ensure it's hidden from the UI immediately
   if (typeof window !== 'undefined') {
     try {
@@ -527,7 +528,63 @@ export async function deleteCourse(id) {
 
   if (FRAPPE_URL) {
     try {
-      // 1. Fetch syllabus first to get chapter and lesson names
+      // 1. Fetch and delete linked Enrollments to avoid LinkExistsError
+      const enrollments = await frappeRestGet("LMS Enrollment", {
+        filters: JSON.stringify([["course", "=", id]]),
+        fields: JSON.stringify(["name"]),
+        limit_page_length: 500
+      }).catch(() => []);
+      if (Array.isArray(enrollments)) {
+        for (const enroll of enrollments) {
+          await frappeRestDelete("LMS Enrollment", enroll.name).catch(err => {
+            console.warn(`Could not delete linked LMS Enrollment ${enroll.name}:`, err);
+          });
+        }
+      }
+
+      // 2. Fetch and delete linked Quizzes
+      const quizzes = await frappeRestGet("LMS Quiz", {
+        filters: JSON.stringify([["course", "=", id]]),
+        fields: JSON.stringify(["name"]),
+        limit_page_length: 500
+      }).catch(() => []);
+      if (Array.isArray(quizzes)) {
+        for (const q of quizzes) {
+          await frappeRestDelete("LMS Quiz", q.name).catch(err => {
+            console.warn(`Could not delete linked LMS Quiz ${q.name}:`, err);
+          });
+        }
+      }
+
+      // 3. Fetch and delete linked Assignments
+      const assignments = await frappeRestGet("LMS Assignment", {
+        filters: JSON.stringify([["course", "=", id]]),
+        fields: JSON.stringify(["name"]),
+        limit_page_length: 500
+      }).catch(() => []);
+      if (Array.isArray(assignments)) {
+        for (const a of assignments) {
+          await frappeRestDelete("LMS Assignment", a.name).catch(err => {
+            console.warn(`Could not delete linked LMS Assignment ${a.name}:`, err);
+          });
+        }
+      }
+
+      // 4. Fetch and delete linked Batches
+      const batches = await frappeRestGet("LMS Batch", {
+        filters: JSON.stringify([["course", "=", id]]),
+        fields: JSON.stringify(["name"]),
+        limit_page_length: 500
+      }).catch(() => []);
+      if (Array.isArray(batches)) {
+        for (const b of batches) {
+          await frappeRestDelete("LMS Batch", b.name).catch(err => {
+            console.warn(`Could not delete linked LMS Batch ${b.name}:`, err);
+          });
+        }
+      }
+
+      // 5. Fetch syllabus first to get chapter and lesson names
       const syllabus = await getCourseSyllabus(id).catch(() => null);
       if (syllabus && syllabus.modules) {
         // Step A: Unlink lessons from chapters by clearing lessons child table in each chapter
@@ -564,7 +621,8 @@ export async function deleteCourse(id) {
       // Step E: Finally delete the LMS Course document itself
       await frappeRestDelete("LMS Course", id);
     } catch (e) {
-      console.error("Failed to delete course via Frappe REST API. Falling back to local state.", e);
+      console.error("Failed to delete course via Frappe REST API.", e);
+      throw e;
     }
   }
 
