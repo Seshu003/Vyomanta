@@ -517,13 +517,12 @@ export default function Playground({
       {/* Editor & Bottom Panels (Vertical Flex) */}
       <div 
         ref={editorPanelRef}
-        style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)' }}
+        style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)', overflowY: 'auto' }}
       >
         {/* Code Editor Container */}
-        <div style={{ flex: 1, minHeight: 100, overflow: 'auto', background: '#0F172A' }}>
+        <div style={{ minHeight: 100, background: '#0F172A' }}>
           <CodeMirror
             value={code}
-            height="100%"
             theme="dark"
             extensions={[python()]}
             onChange={(value) => setCode(value)}
