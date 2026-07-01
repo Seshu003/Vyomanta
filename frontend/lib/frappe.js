@@ -17,6 +17,43 @@ const DEFAULT_COURSES = [
   { id: '4', title: 'Web Development with Next.js', instructor: 'John Sarith', category: 'Collaborate', enrolled: 18, status: 'Draft', date: 'Jan 11, 2023' },
 ];
 
+// Client-side cache for optimized loading
+const clientCache = {
+  courses: null,
+  coursesTimestamp: 0,
+  syllabus: {}, // courseId -> { data, timestamp }
+};
+
+// Helper to invalidate cache
+export function invalidateCoursesCache() {
+  clientCache.courses = null;
+  clientCache.coursesTimestamp = 0;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('cached_courses_list');
+    localStorage.removeItem('cached_courses_timestamp');
+  }
+}
+
+export function invalidateSyllabusCache(courseId) {
+  if (courseId) {
+    delete clientCache.syllabus[courseId];
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`cached_syllabus_${courseId}`);
+      localStorage.removeItem(`cached_syllabus_timestamp_${courseId}`);
+    }
+  } else {
+    clientCache.syllabus = {};
+    if (typeof window !== 'undefined') {
+      // Clear all cached syllabuses from localStorage
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('cached_syllabus_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+  }
+}
+
 async function handleResponse(res, isRest = true) {
   if (!res.ok) {
     let errMsg = `HTTP Error ${res.status}`;
@@ -210,130 +247,171 @@ export async function getCourses() {
     } catch (e) {}
   }
 
-  if (FRAPPE_URL) {
-    try {
-      const list = await frappeGet("lms.lms.api.get_courses_optimized");
-      if (list && Array.isArray(list) && !list.error) {
-        if (typeof window !== 'undefined' && locallyDeleted.length > 0) {
-          const activeIds = new Set(list.map(c => c.id));
-          const cleaned = locallyDeleted.filter(id => !activeIds.has(id));
-          if (cleaned.length !== locallyDeleted.length) {
-            localStorage.setItem('locally_deleted_courses', JSON.stringify(cleaned));
-          }
+  // Check cache first
+  const now = Date.now();
+  if (typeof window !== 'undefined') {
+    if (!clientCache.courses) {
+      try {
+        const cachedStr = localStorage.getItem('cached_courses_list');
+        const cachedTs = Number(localStorage.getItem('cached_courses_timestamp') || '0');
+        if (cachedStr && cachedTs) {
+          clientCache.courses = JSON.parse(cachedStr);
+          clientCache.coursesTimestamp = cachedTs;
         }
-        return list;
-      }
-    } catch (e) {
-      console.warn("Failed to fetch optimized courses, falling back to legacy REST API.", e);
-    }
-
-    try {
-      // Fetch LMS Courses and Enrollments from Frappe in parallel
-      const [courses, enrollments] = await Promise.all([
-        frappeRestGet("LMS Course", {
-          fields: JSON.stringify(["name", "title", "published", "creation", "category", "short_introduction", "lessons"]),
-          limit_page_length: 100
-        }),
-        frappeRestGet("LMS Enrollment", {
-          fields: JSON.stringify(["course", "member"]),
-          limit_page_length: 1000
-        }).catch(() => [])
-      ]);
-
-      const enrollmentCounts = {};
-      if (enrollments && Array.isArray(enrollments)) {
-        enrollments.forEach(e => {
-          if (e.course) {
-            enrollmentCounts[e.course] = (enrollmentCounts[e.course] || 0) + 1;
-          }
-        });
-      }
-
-      if (courses && Array.isArray(courses)) {
-        const mapped = courses.map(c => ({
-          id: c.name,
-          title: c.title,
-          instructor: "Administrator", // Default mock mapping for standard LMS Course
-          category: c.category || "Web Development",
-          tagline: c.short_introduction || "Learn the basics and get started.",
-          lessonsCount: c.lessons || 0,
-          enrolled: enrollmentCounts[c.name] || 0,
-          status: c.published ? "Published" : "Draft",
-          date: new Date(c.creation).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        }));
-
-        // Clean up locallyDeleted cache for any courses that actually exist in the backend
-        if (typeof window !== 'undefined' && locallyDeleted.length > 0) {
-          const activeIds = new Set(mapped.map(c => c.id));
-          const cleaned = locallyDeleted.filter(id => !activeIds.has(id));
-          if (cleaned.length !== locallyDeleted.length) {
-            localStorage.setItem('locally_deleted_courses', JSON.stringify(cleaned));
-          }
-        }
-        
-        return mapped;
-      }
-    } catch (e) {
-      console.error("Failed to fetch courses from Frappe REST API. Falling back to local state.", e);
+      } catch (e) {}
     }
   }
 
-  // Fallback to LocalStorage for offline/simulated mode
-  if (typeof window !== 'undefined') {
-    // Seed initial enrollments if not set
-    const savedEnrollments = localStorage.getItem('student_course_enrollments');
-    let localEnrollments = [];
-    if (!savedEnrollments) {
-      const defaultEnrollments = [
-        { course: '1', member: 'student1@lms.com' },
-        { course: '2', member: 'student1@lms.com' },
-        { course: '1', member: 'student2@lms.com' },
-        { course: '1', member: 'student3@lms.com' },
-        { course: '2', member: 'student3@lms.com' },
-        { course: '3', member: 'student3@lms.com' },
-        { course: '2', member: 'student4@lms.com' },
-        { course: '1', member: 'student5@lms.com' }
-      ];
-      localStorage.setItem('student_course_enrollments', JSON.stringify(defaultEnrollments));
-      localEnrollments = defaultEnrollments;
-    } else {
+  // If cache is valid (within 15 seconds), return it instantly
+  if (clientCache.courses && (now - clientCache.coursesTimestamp < 15000)) {
+    return clientCache.courses.filter(c => !locallyDeleted.includes(c.id));
+  }
+
+  const fetchPromise = (async () => {
+    let list = null;
+    if (FRAPPE_URL) {
       try {
-        localEnrollments = JSON.parse(savedEnrollments);
-      } catch (e) {}
+        list = await frappeGet("lms.lms.api.get_courses_optimized");
+        if (list && Array.isArray(list) && !list.error) {
+          // Success
+        } else {
+          list = null;
+        }
+      } catch (e) {
+        console.warn("Failed to fetch optimized courses, falling back to legacy REST API.", e);
+      }
+
+      if (!list) {
+        try {
+          // Fetch LMS Courses and Enrollments from Frappe in parallel
+          const [courses, enrollments] = await Promise.all([
+            frappeRestGet("LMS Course", {
+              fields: JSON.stringify(["name", "title", "published", "creation", "category", "short_introduction", "lessons"]),
+              limit_page_length: 100
+            }),
+            frappeRestGet("LMS Enrollment", {
+              fields: JSON.stringify(["course", "member"]),
+              limit_page_length: 1000
+            }).catch(() => [])
+          ]);
+
+          const enrollmentCounts = {};
+          if (enrollments && Array.isArray(enrollments)) {
+            enrollments.forEach(e => {
+              if (e.course) {
+                enrollmentCounts[e.course] = (enrollmentCounts[e.course] || 0) + 1;
+              }
+            });
+          }
+
+          if (courses && Array.isArray(courses)) {
+            list = courses.map(c => ({
+              id: c.name,
+              title: c.title,
+              instructor: "Administrator",
+              category: c.category || "Web Development",
+              tagline: c.short_introduction || "Learn the basics and get started.",
+              lessonsCount: c.lessons || 0,
+              enrolled: enrollmentCounts[c.name] || 0,
+              status: c.published ? "Published" : "Draft",
+              date: new Date(c.creation).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            }));
+          }
+        } catch (e) {
+          console.error("Failed to fetch courses from Frappe REST API. Falling back to local state.", e);
+        }
+      }
     }
 
-    const localCounts = {};
-    localEnrollments.forEach(e => {
-      if (e.course) {
-        localCounts[e.course] = (localCounts[e.course] || 0) + 1;
+    // Fallback to LocalStorage for offline/simulated mode
+    if (!list && typeof window !== 'undefined') {
+      const savedEnrollments = localStorage.getItem('student_course_enrollments');
+      let localEnrollments = [];
+      if (!savedEnrollments) {
+        const defaultEnrollments = [
+          { course: '1', member: 'student1@lms.com' },
+          { course: '2', member: 'student1@lms.com' },
+          { course: '1', member: 'student2@lms.com' },
+          { course: '1', member: 'student3@lms.com' },
+          { course: '2', member: 'student3@lms.com' },
+          { course: '3', member: 'student3@lms.com' },
+          { course: '2', member: 'student4@lms.com' },
+          { course: '1', member: 'student5@lms.com' }
+        ];
+        localStorage.setItem('student_course_enrollments', JSON.stringify(defaultEnrollments));
+        localEnrollments = defaultEnrollments;
+      } else {
+        try {
+          localEnrollments = JSON.parse(savedEnrollments);
+        } catch (e) {}
       }
-    });
 
-    const saved = localStorage.getItem('admin_courses_list');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const mapped = parsed.map(c => ({
+      const localCounts = {};
+      localEnrollments.forEach(e => {
+        if (e.course) {
+          localCounts[e.course] = (localCounts[e.course] || 0) + 1;
+        }
+      });
+
+      const saved = localStorage.getItem('admin_courses_list');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          list = parsed.map(c => ({
+            ...c,
+            enrolled: localCounts[c.id] || 0
+          }));
+        } catch (e) {}
+      }
+      if (!list) {
+        list = DEFAULT_COURSES.map(c => ({
           ...c,
           enrolled: localCounts[c.id] || 0
         }));
-        return mapped.filter(c => !locallyDeleted.includes(c.id));
+        localStorage.setItem('admin_courses_list', JSON.stringify(list));
+      }
+    }
+
+    if (!list) {
+      list = DEFAULT_COURSES;
+    }
+
+    // Clean up locallyDeleted cache for any courses that actually exist in the backend
+    if (typeof window !== 'undefined' && locallyDeleted.length > 0) {
+      const activeIds = new Set(list.map(c => c.id));
+      const cleaned = locallyDeleted.filter(id => !activeIds.has(id));
+      if (cleaned.length !== locallyDeleted.length) {
+        localStorage.setItem('locally_deleted_courses', JSON.stringify(cleaned));
+      }
+    }
+
+    // Update Cache
+    clientCache.courses = list;
+    clientCache.coursesTimestamp = Date.now();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cached_courses_list', JSON.stringify(list));
+        localStorage.setItem('cached_courses_timestamp', String(clientCache.coursesTimestamp));
       } catch (e) {}
     }
-    const mappedDefaults = DEFAULT_COURSES.map(c => ({
-      ...c,
-      enrolled: localCounts[c.id] || 0
-    }));
-    localStorage.setItem('admin_courses_list', JSON.stringify(mappedDefaults));
-    return mappedDefaults.filter(c => !locallyDeleted.includes(c.id));
+
+    return list.filter(c => !locallyDeleted.includes(c.id));
+  })();
+
+  if (clientCache.courses) {
+    // Run background refresh silently
+    fetchPromise.catch(e => console.warn("Background courses refresh failed:", e));
+    return clientCache.courses.filter(c => !locallyDeleted.includes(c.id));
   }
-  return DEFAULT_COURSES.filter(c => !locallyDeleted.includes(c.id));
+
+  return fetchPromise;
 }
 
 /**
  * Create a new course
  */
 export async function createCourse(courseData) {
+  invalidateCoursesCache();
   if (FRAPPE_URL) {
     try {
       let inst = "Administrator";
@@ -387,6 +465,8 @@ export async function createCourse(courseData) {
  * Update a course
  */
 export async function updateCourse(id, courseData) {
+  invalidateCoursesCache();
+  if (id) invalidateSyllabusCache(id);
   if (FRAPPE_URL) {
     try {
       let inst = "Administrator";
@@ -432,6 +512,8 @@ export async function updateCourse(id, courseData) {
  * Delete a course
  */
 export async function deleteCourse(id) {
+  invalidateCoursesCache();
+  if (id) invalidateSyllabusCache(id);
   // Save to locally deleted list to ensure it's hidden from the UI immediately
   if (typeof window !== 'undefined') {
     try {
@@ -502,121 +584,190 @@ export async function deleteCourse(id) {
 /**
  * Fetch course syllabus outline (Chapters & Lessons) from Frappe DocTypes or Local Caches
  */
-export async function getCourseSyllabus(courseId) {
+export async function getCourseSyllabus(courseId, options = {}) {
+  const forceRefresh = options.forceRefresh || false;
+  const now = Date.now();
+
+  // Check cache first
+  if (!forceRefresh) {
+    if (typeof window !== 'undefined') {
+      if (!clientCache.syllabus[courseId]) {
+        try {
+          const cachedStr = localStorage.getItem(`cached_syllabus_${courseId}`);
+          const cachedTs = Number(localStorage.getItem(`cached_syllabus_timestamp_${courseId}`) || '0');
+          if (cachedStr && cachedTs) {
+            clientCache.syllabus[courseId] = {
+              data: JSON.parse(cachedStr),
+              timestamp: cachedTs
+            };
+          }
+        } catch (e) {}
+      }
+    }
+
+    const cachedEntry = clientCache.syllabus[courseId];
+    if (cachedEntry && (now - cachedEntry.timestamp < 300000)) { // 5 minutes TTL
+      return cachedEntry.data;
+    }
+  }
+
+  let syllabus = null;
   if (FRAPPE_URL) {
     try {
-      const syllabus = await frappeGet("lms.lms.api.get_course_syllabus_optimized", { course_id: courseId });
+      syllabus = await frappeGet("lms.lms.api.get_course_syllabus_optimized", { course_id: courseId });
       if (syllabus && !syllabus.error) {
-        return syllabus;
+        // Success
+      } else {
+        syllabus = null;
       }
     } catch (e) {
       console.warn("Failed to fetch optimized syllabus, falling back to legacy REST API.", e);
     }
 
-    try {
-      // 1. Fetch the main Course document to read its chapters child table
-      const courseDoc = await frappeRestGet(`LMS Course/${courseId}`);
-      const chapterRefs = courseDoc.chapters || [];
+    if (!syllabus) {
+      try {
+        // 1. Fetch the main Course document to read its chapters child table
+        const courseDoc = await frappeRestGet(`LMS Course/${courseId}`);
+        const chapterRefs = courseDoc.chapters || [];
 
-      // 2. Fetch all Course Chapters in parallel
-      const modules = await Promise.all((chapterRefs || []).map(async (ref) => {
-        try {
-          const chDoc = await frappeRestGet(`Course Chapter/${ref.chapter}`);
-          const lessonRefs = chDoc.lessons || [];
+        // 2. Fetch all Course Chapters in parallel
+        const modules = await Promise.all((chapterRefs || []).map(async (ref) => {
+          try {
+            const chDoc = await frappeRestGet(`Course Chapter/${ref.chapter}`);
+            const lessonRefs = chDoc.lessons || [];
 
-          // 3. Fetch all Course Lessons for this chapter in parallel
-          const lessons = await Promise.all((lessonRefs || []).map(async (lRef) => {
-            try {
-              const lDoc = await frappeRestGet(`Course Lesson/${lRef.lesson}`);
-              
-              // Deserialize pts and quizQuestions from instructor_notes
-              let pts = ["Key concept introduction."];
-              let quizQuestions = [];
-              if (lDoc.instructor_notes) {
-                try {
-                  const meta = JSON.parse(lDoc.instructor_notes);
-                  if (Array.isArray(meta.pts)) pts = meta.pts;
-                  if (Array.isArray(meta.quizQuestions)) quizQuestions = meta.quizQuestions;
-                } catch (e) {}
+            // 3. Fetch all Course Lessons for this chapter in parallel
+            const lessons = await Promise.all((lessonRefs || []).map(async (lRef) => {
+              try {
+                const lDoc = await frappeRestGet(`Course Lesson/${lRef.lesson}`);
+                
+                // Deserialize pts, quizQuestions, and codingExercise from instructor_notes
+                let pts = ["Key concept introduction."];
+                let quizQuestions = [];
+                let codingExercise = {
+                  hasExercise: false,
+                  language: 'python',
+                  instruction: '',
+                  starterCode: '',
+                  solutionCode: '',
+                  testCases: []
+                };
+
+                if (lDoc.instructor_notes) {
+                  try {
+                    const meta = JSON.parse(lDoc.instructor_notes);
+                    if (Array.isArray(meta.pts)) pts = meta.pts;
+                    if (Array.isArray(meta.quizQuestions)) quizQuestions = meta.quizQuestions;
+                    if (meta.codingExercise) codingExercise = meta.codingExercise;
+                  } catch (e) {}
+                }
+
+                return {
+                  id: lDoc.name,
+                  title: lDoc.title,
+                  dur: lDoc.duration || "10 min",
+                  vid: lDoc.youtube || "rfscVS0vtbw",
+                  overview: lDoc.body || "",
+                  pts,
+                  quizQuestions,
+                  codingExercise
+                };
+              } catch (err) {
+                console.error(`Failed to fetch lesson details for ${lRef.lesson}`, err);
+                return { id: lRef.lesson, title: "Untitled Lesson", dur: "10 min", vid: "", overview: "", pts: [], quizQuestions: [], codingExercise: { hasExercise: false, language: 'python', instruction: '', starterCode: '', solutionCode: '', testCases: [] } };
               }
+            }));
 
-              return {
-                id: lDoc.name,
-                title: lDoc.title,
-                dur: lDoc.duration || "10 min",
-                vid: lDoc.youtube || "rfscVS0vtbw",
-                overview: lDoc.body || "",
-                pts,
-                quizQuestions
-              };
-            } catch (err) {
-              console.error(`Failed to fetch lesson details for ${lRef.lesson}`, err);
-              return { id: lRef.lesson, title: "Untitled Lesson", dur: "10 min", vid: "", overview: "", pts: [], quizQuestions: [] };
-            }
-          }));
+            return {
+              id: chDoc.name,
+              title: chDoc.title,
+              emoji: "📖",
+              accent: "#5B8CF8",
+              lessons
+            };
+          } catch (err) {
+            console.error(`Failed to fetch chapter details for ${ref.chapter}`, err);
+            return { id: ref.chapter, title: "Untitled Chapter", emoji: "📖", accent: "#5B8CF8", lessons: [] };
+          }
+        }));
 
-          return {
-            id: chDoc.name,
-            title: chDoc.title,
-            emoji: "📖",
-            accent: "#5B8CF8",
-            lessons
-          };
-        } catch (err) {
-          console.error(`Failed to fetch chapter details for ${ref.chapter}`, err);
-          return { id: ref.chapter, title: "Untitled Chapter", emoji: "📖", accent: "#5B8CF8", lessons: [] };
-        }
-      }));
-
-      return {
-        id: courseId,
-        title: courseDoc.title,
-        tagline: courseDoc.short_introduction || "",
-        modules
-      };
-    } catch (e) {
-      console.error("Failed to fetch syllabus from Frappe. Falling back to local state.", e);
+        syllabus = {
+          id: courseId,
+          title: courseDoc.title,
+          tagline: courseDoc.short_introduction || "",
+          modules
+        };
+      } catch (e) {
+        console.error("Failed to fetch syllabus from Frappe. Falling back to local state.", e);
+      }
     }
   }
 
   // Caching fallback
-  if (typeof window !== 'undefined') {
+  if (!syllabus && typeof window !== 'undefined') {
     const saved = localStorage.getItem(`admin_course_details_${courseId}`);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        syllabus = JSON.parse(saved);
       } catch (e) {}
     }
 
-    // Default structure for newly created courses
-    const defaultOutline = {
-      id: courseId,
-      title: "Course Syllabus Outline",
-      tagline: "Define modules and lessons for students.",
-      modules: [
-        {
-          id: `${courseId}_m1`,
-          title: "Introduction",
-          emoji: "🚀",
-          accent: "#5B8CF8",
-          lessons: [
-            {
-              id: `${courseId}_l1`,
-              title: "What is this course?",
-              dur: "5 min",
-              vid: "rfscVS0vtbw",
-              overview: "Welcome to the course. Here is a brief explanation of what we will cover.",
-              pts: ["Course overview", "Course requirements"],
-              quizQuestions: []
-            }
-          ]
-        }
-      ]
-    };
-    localStorage.setItem(`admin_course_details_${courseId}`, JSON.stringify(defaultOutline));
-    return defaultOutline;
+    if (!syllabus) {
+      // Default structure for newly created courses
+      const defaultOutline = {
+        id: courseId,
+        title: "Course Syllabus Outline",
+        tagline: "Define modules and lessons for students.",
+        modules: [
+          {
+            id: `${courseId}_m1`,
+            title: "Introduction",
+            emoji: "🚀",
+            accent: "#5B8CF8",
+            lessons: [
+              {
+                id: `${courseId}_l1`,
+                title: "What is this course?",
+                dur: "5 min",
+                vid: "rfscVS0vtbw",
+                overview: "Welcome to the course. Here is a brief explanation of what we will cover.",
+                pts: ["Course overview", "Course requirements"],
+                quizQuestions: [],
+                codingExercise: {
+                  hasExercise: false,
+                  language: 'python',
+                  instruction: '',
+                  starterCode: '',
+                  solutionCode: '',
+                  testCases: []
+                }
+              }
+            ]
+          }
+        ]
+      };
+      localStorage.setItem(`admin_course_details_${courseId}`, JSON.stringify(defaultOutline));
+      syllabus = defaultOutline;
+    }
   }
-  return { id: courseId, modules: [] };
+
+  if (!syllabus) {
+    syllabus = { id: courseId, modules: [] };
+  }
+
+  // Save to Cache
+  clientCache.syllabus[courseId] = {
+    data: syllabus,
+    timestamp: Date.now()
+  };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`cached_syllabus_${courseId}`, JSON.stringify(syllabus));
+      localStorage.setItem(`cached_syllabus_timestamp_${courseId}`, String(clientCache.syllabus[courseId].timestamp));
+    } catch (e) {}
+  }
+
+  return syllabus;
 }
 
 /**
@@ -626,7 +777,7 @@ export async function saveCourseSyllabus(courseId, syllabus) {
   if (FRAPPE_URL) {
     try {
       // Get the existing database syllabus first to identify deletions
-      const oldSyllabus = await getCourseSyllabus(courseId).catch(() => null);
+      const oldSyllabus = await getCourseSyllabus(courseId, { forceRefresh: true }).catch(() => null);
       const oldChapters = new Set();
       const oldLessons = new Set();
       if (oldSyllabus && oldSyllabus.modules) {
@@ -677,10 +828,18 @@ export async function saveCourseSyllabus(courseId, syllabus) {
         for (const lesson of chapter.lessons) {
           let lessonId = lesson.id;
           
-          // Serialize pts and quizQuestions to instructor_notes to persist in DB
+          // Serialize pts, quizQuestions, and codingExercise to instructor_notes to persist in DB
           const notesStr = JSON.stringify({
             pts: lesson.pts || ["Key concept introduction."],
-            quizQuestions: lesson.quizQuestions || []
+            quizQuestions: lesson.quizQuestions || [],
+            codingExercise: lesson.codingExercise || {
+              hasExercise: false,
+              language: 'python',
+              instruction: '',
+              starterCode: '',
+              solutionCode: '',
+              testCases: []
+            }
           });
 
           if (lesson.id.startsWith("les_")) {
@@ -733,7 +892,9 @@ export async function saveCourseSyllabus(courseId, syllabus) {
         }
       }
 
-      return getCourseSyllabus(courseId);
+      invalidateCoursesCache();
+      invalidateSyllabusCache(courseId);
+      return getCourseSyllabus(courseId, { forceRefresh: true });
     } catch (e) {
       console.error("Failed to sync course syllabus outline with Frappe REST server.", e);
     }
@@ -742,6 +903,8 @@ export async function saveCourseSyllabus(courseId, syllabus) {
   // Caching fallback
   if (typeof window !== 'undefined') {
     localStorage.setItem(`admin_course_details_${courseId}`, JSON.stringify(syllabus));
+    invalidateCoursesCache();
+    invalidateSyllabusCache(courseId);
     return syllabus;
   }
   return syllabus;
@@ -973,6 +1136,7 @@ export async function deleteBatch(id) {
  * Enroll a student in a course
  */
 export async function enrollStudentInCourse(courseId, studentEmail) {
+  invalidateCoursesCache();
   if (FRAPPE_URL) {
     try {
       return await frappeRestPost("LMS Enrollment", {
@@ -1988,6 +2152,15 @@ export async function getProgressFromRedis(email) {
 
 export async function getLMSStudents() {
   if (FRAPPE_URL) {
+    try {
+      const users = await frappeGet("lms.lms.api.get_lms_students_optimized");
+      if (users && Array.isArray(users) && !users.error) {
+        return users;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch optimized students, falling back to legacy User REST API.", e);
+    }
+
     try {
       const users = await frappeRestGet("User", {
         fields: JSON.stringify(["name", "email", "full_name", "enabled"]),

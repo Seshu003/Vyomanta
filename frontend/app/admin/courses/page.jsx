@@ -1094,7 +1094,7 @@ export default function AdminCoursesPage() {
                       <p style={{ color: T.muted, fontSize: 13, margin: 0 }}>
                         {importResult.localFallback 
                           ? 'CSV syllabus parsed and saved to local storage fallback.' 
-                          : 'Syllabus structure sync\'d successfully with Frappe backend.'}
+                          : 'Syllabus structure sync\'d successfully.'}
                       </p>
                     </div>
                   </div>

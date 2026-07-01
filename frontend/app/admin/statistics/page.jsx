@@ -129,7 +129,7 @@ export default function AdminStatisticsPage() {
         }, 0);
 
         // Sum up course enrollments (as dynamic base)
-        const totalEnrollments = coursesData.reduce((sum, c) => sum + (c.enrolled || 0), 0) || 25;
+        const totalEnrollments = coursesData.reduce((sum, c) => sum + (c.enrolled || 0), 0) || 0;
 
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         
@@ -226,7 +226,7 @@ export default function AdminStatisticsPage() {
 
           return {
             name: course.title,
-            enrolled: course.enrolled || 10,
+            enrolled: course.enrolled || 0,
             rate: `${completionPct}%`,
             score: `${averageScore}`
           };

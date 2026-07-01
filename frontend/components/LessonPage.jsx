@@ -20,6 +20,14 @@ export default function LessonPage({ lesson, completed = {}, onComplete }) {
   const router  = useRouter();
   const [next, setNext] = useState(null);
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false);
+
+  useEffect(() => {
+    if (lesson?.codingExercise?.hasExercise) {
+      setIsPlaygroundOpen(true);
+    } else {
+      setIsPlaygroundOpen(false);
+    }
+  }, [lesson?.id, lesson?.codingExercise?.hasExercise]);
   
   // Resolve module: prefer lesson.module, fall back to matching module in static COURSE
   const mod = lesson.module || COURSE.modules.find(m => m.lessons.some(l => l.id === lesson.id)) || COURSE.modules[0];
@@ -790,12 +798,20 @@ export default function LessonPage({ lesson, completed = {}, onComplete }) {
 
       {isPlaygroundOpen && isMobile && (
         <div style={{ marginTop: 24, height: 400, flexShrink: 0 }}>
-          <Playground initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`} />
+          <Playground
+            initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`}
+            codingExercise={lesson.codingExercise}
+            onVerifySuccess={() => onComplete(lesson.id)}
+          />
         </div>
       )}
       {isPlaygroundOpen && !isMobile && isTabletOrSmallDesktop && (
         <div style={{ marginTop: 32, height: 500, flexShrink: 0 }}>
-          <Playground initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`} />
+          <Playground
+            initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`}
+            codingExercise={lesson.codingExercise}
+            onVerifySuccess={() => onComplete(lesson.id)}
+          />
         </div>
       )}
     </div>
@@ -808,7 +824,11 @@ export default function LessonPage({ lesson, completed = {}, onComplete }) {
         display: 'flex',
         flexDirection: 'column'
       }}>
-        <Playground initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`} />
+        <Playground
+          initialCode={`# Practice Python for: ${lesson.title}\n# Write your code here\n\n`}
+          codingExercise={lesson.codingExercise}
+          onVerifySuccess={() => onComplete(lesson.id)}
+        />
       </div>
     )}
   </div>

@@ -12,7 +12,7 @@ def main():
         content = f.read()
 
     # Clean out any old definitions of our custom functions to avoid duplicates
-    for func_name in ['get_google_auth_url', 'test_google_auth_traceback', 'get_api_file', 'execute_py', 'get_courses_optimized', 'get_course_syllabus_optimized']:
+    for func_name in ['get_google_auth_url', 'test_google_auth_traceback', 'get_api_file', 'execute_py', 'get_courses_optimized', 'get_course_syllabus_optimized', 'get_lms_students_optimized']:
         if func_name in content:
             print(f"Found existing {func_name}. Stripping old definition...")
             content = content.split('def ' + func_name)[0]
@@ -209,6 +209,15 @@ def get_course_syllabus_optimized(course_id: str):
                         
                         pts = ["Key concept introduction."]
                         quiz_questions = []
+                        coding_exercise = {
+                            "hasExercise": False,
+                            "language": "python",
+                            "instruction": "",
+                            "starterCode": "",
+                            "solutionCode": "",
+                            "testCases": []
+                        }
+                        
                         notes = lDoc.get("instructor_notes")
                         if notes:
                             try:
@@ -218,6 +227,8 @@ def get_course_syllabus_optimized(course_id: str):
                                         pts = meta["pts"]
                                     if isinstance(meta.get("quizQuestions"), list):
                                         quiz_questions = meta["quizQuestions"]
+                                    if isinstance(meta.get("codingExercise"), dict):
+                                        coding_exercise = meta["codingExercise"]
                             except Exception:
                                 pass
                                 
@@ -228,7 +239,8 @@ def get_course_syllabus_optimized(course_id: str):
                             "vid": lDoc.get("youtube") or "rfscVS0vtbw",
                             "overview": lDoc.get("body") or "",
                             "pts": pts,
-                            "quizQuestions": quiz_questions
+                            "quizQuestions": quiz_questions,
+                            "codingExercise": coding_exercise
                         })
                     elif l_name:
                         lessons.append({
@@ -238,7 +250,15 @@ def get_course_syllabus_optimized(course_id: str):
                             "vid": "",
                             "overview": "",
                             "pts": [],
-                            "quizQuestions": []
+                            "quizQuestions": [],
+                            "codingExercise": {
+                                "hasExercise": False,
+                                "language": "python",
+                                "instruction": "",
+                                "starterCode": "",
+                                "solutionCode": "",
+                                "testCases": []
+                            }
                         })
                         
                 modules.append({
@@ -257,6 +277,22 @@ def get_course_syllabus_optimized(course_id: str):
         }
     except Exception as e:
         import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist(allow_guest=True)
+def get_lms_students_optimized():
+    import frappe
+    import traceback
+    try:
+        users = frappe.get_all("User", 
+                               fields=["name", "email", "full_name", "enabled"],
+                               filters=[["name", "not in", ["Administrator", "Guest"]], ["enabled", "=", 1]],
+                               limit_page_length=500)
+        return [{"username": u.email or u.name, "name": u.full_name or u.name} for u in users]
+    except Exception as e:
         return {
             "error": str(e),
             "traceback": traceback.format_exc()

@@ -27,6 +27,7 @@ export default function CourseOutlinePage() {
 
   // Modals / Editors state
   const [chapterModal, setChapterModal] = useState({ open: false, mode: 'create', chapterId: '', title: '' });
+  const [activeLessonTab, setActiveLessonTab] = useState('basic');
   const [lessonModal, setLessonModal] = useState({
     open: false,
     mode: 'create',
@@ -37,7 +38,13 @@ export default function CourseOutlinePage() {
     vid: '',
     overview: '',
     ptsInput: '', // newline-separated key points
-    quizQuestions: [] // quiz questions list
+    quizQuestions: [], // quiz questions list
+    hasExercise: false,
+    exerciseLanguage: 'python',
+    exerciseInstruction: '',
+    exerciseStarterCode: '# Write your code here\n',
+    exerciseSolutionCode: '',
+    exerciseTestCases: ''
   });
 
   // Current editing quiz question modal/form
@@ -82,7 +89,7 @@ export default function CourseOutlinePage() {
     try {
       const saved = await saveCourseSyllabus(id, updatedSyllabus || syllabus);
       setSyllabus(saved);
-      alert('Syllabus outline successfully synchronized with Frappe server.');
+      alert('Syllabus outline successfully synchronized.');
     } catch (e) {
       alert('Failed to save syllabus: ' + e.message);
     } finally {
@@ -142,6 +149,7 @@ export default function CourseOutlinePage() {
   // --- Lesson Operations ---
 
   const openAddLesson = (chapterId) => {
+    setActiveLessonTab('basic');
     setLessonModal({
       open: true,
       mode: 'create',
@@ -152,11 +160,28 @@ export default function CourseOutlinePage() {
       vid: '',
       overview: '',
       ptsInput: '',
-      quizQuestions: []
+      quizQuestions: [],
+      hasExercise: false,
+      exerciseLanguage: 'python',
+      exerciseInstruction: '',
+      exerciseStarterCode: '# Write your code here\n',
+      exerciseSolutionCode: '',
+      exerciseTestCases: ''
     });
   };
 
   const openEditLesson = (chapterId, lesson) => {
+    setActiveLessonTab('basic');
+    const coding = lesson.codingExercise || {
+      hasExercise: false,
+      language: 'python',
+      instruction: '',
+      starterCode: '',
+      solutionCode: '',
+      testCases: []
+    };
+    const testCasesStr = Array.isArray(coding.testCases) ? coding.testCases.join('\n') : (coding.testCases || '');
+
     setLessonModal({
       open: true,
       mode: 'edit',
@@ -167,7 +192,13 @@ export default function CourseOutlinePage() {
       vid: lesson.vid,
       overview: lesson.overview || '',
       ptsInput: (lesson.pts || []).join('\n'),
-      quizQuestions: lesson.quizQuestions || []
+      quizQuestions: lesson.quizQuestions || [],
+      hasExercise: coding.hasExercise || false,
+      exerciseLanguage: coding.language || 'python',
+      exerciseInstruction: coding.instruction || '',
+      exerciseStarterCode: coding.starterCode || '',
+      exerciseSolutionCode: coding.solutionCode || '',
+      exerciseTestCases: testCasesStr
     });
   };
 
@@ -198,6 +229,20 @@ export default function CourseOutlinePage() {
       .map(p => p.trim())
       .filter(p => p.length > 0);
 
+    const testCasesArr = lessonModal.exerciseTestCases
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    const codingObj = {
+      hasExercise: lessonModal.hasExercise || false,
+      language: lessonModal.exerciseLanguage || 'python',
+      instruction: lessonModal.exerciseInstruction || '',
+      starterCode: lessonModal.exerciseStarterCode || '',
+      solutionCode: lessonModal.exerciseSolutionCode || '',
+      testCases: testCasesArr
+    };
+
     const updatedModules = syllabus.modules.map(m => {
       if (m.id === lessonModal.chapterId) {
         let updatedLessons = [...m.lessons];
@@ -210,7 +255,8 @@ export default function CourseOutlinePage() {
             vid: lessonModal.vid || 'rfscVS0vtbw',
             overview: lessonModal.overview,
             pts: points.length > 0 ? points : ['Key concept introduction.'],
-            quizQuestions: lessonModal.quizQuestions
+            quizQuestions: lessonModal.quizQuestions,
+            codingExercise: codingObj
           };
           updatedLessons.push(newLesson);
         } else {
@@ -223,7 +269,8 @@ export default function CourseOutlinePage() {
                   vid: lessonModal.vid,
                   overview: lessonModal.overview,
                   pts: points,
-                  quizQuestions: lessonModal.quizQuestions
+                  quizQuestions: lessonModal.quizQuestions,
+                  codingExercise: codingObj
                 }
               : l
           );
@@ -237,7 +284,24 @@ export default function CourseOutlinePage() {
     const updated = { ...syllabus, modules: updatedModules };
     setSyllabus(updated);
     handleSaveSyllabus(updated);
-    setLessonModal({ open: false, mode: 'create', chapterId: '', lessonId: '', title: '', dur: '10 min', vid: '', overview: '', ptsInput: '', quizQuestions: [] });
+    setLessonModal({
+      open: false,
+      mode: 'create',
+      chapterId: '',
+      lessonId: '',
+      title: '',
+      dur: '10 min',
+      vid: '',
+      overview: '',
+      ptsInput: '',
+      quizQuestions: [],
+      hasExercise: false,
+      exerciseLanguage: 'python',
+      exerciseInstruction: '',
+      exerciseStarterCode: '# Write your code here\n',
+      exerciseSolutionCode: '',
+      exerciseTestCases: ''
+    });
   };
 
   // --- Quiz Management inside Lesson Editor ---
@@ -325,7 +389,7 @@ export default function CourseOutlinePage() {
               display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(34, 197, 160, 0.15)'
             }}
           >
-            <Save size={15} /> {saveLoading ? 'Syncing...' : 'Sync with Frappe'}
+            <Save size={15} /> {saveLoading ? 'Syncing...' : 'Sync'}
           </button>
         </div>
       </div>
@@ -552,204 +616,347 @@ export default function CourseOutlinePage() {
               <Video size={16} color={T.accent} /> {lessonModal.mode === 'create' ? 'Add Lesson Outline' : 'Edit Lesson Details'}
             </h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 14, marginBottom: 14 }}>
-              {/* Title */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label htmlFor="lessonTitle" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Lesson Title</label>
-                <input
-                  id="lessonTitle"
-                  type="text"
-                  value={lessonModal.title}
-                  onChange={(e) => setLessonModal(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g. Dynamic Typing"
-                  required
-                  style={{
-                    width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
-                    padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
-                  }}
-                />
-              </div>
-
-              {/* Duration */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label htmlFor="lessonDur" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Duration</label>
-                <input
-                  id="lessonDur"
-                  type="text"
-                  value={lessonModal.dur}
-                  onChange={(e) => setLessonModal(prev => ({ ...prev, dur: e.target.value }))}
-                  placeholder="e.g. 10 min"
-                  required
-                  style={{
-                    width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
-                    padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Video ID */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
-              <label htmlFor="lessonVid" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>YouTube Video ID (or URL suffix)</label>
-              <input
-                id="lessonVid"
-                type="text"
-                value={lessonModal.vid}
-                onChange={(e) => setLessonModal(prev => ({ ...prev, vid: e.target.value }))}
-                placeholder="e.g. rfscVS0vtbw"
-                style={{
-                  width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
-                  padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
-                }}
-              />
-            </div>
-
-            {/* Overview */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
-              <label htmlFor="lessonOverview" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Lesson Overview</label>
-              <textarea
-                id="lessonOverview"
-                rows="2"
-                value={lessonModal.overview}
-                onChange={(e) => setLessonModal(prev => ({ ...prev, overview: e.target.value }))}
-                placeholder="A short summary of lesson contents."
-                style={{
-                  width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
-                  padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'none'
-                }}
-              />
-            </div>
-
-            {/* Key Points */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
-              <label htmlFor="lessonPoints" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Key Study Points (one per line)</label>
-              <textarea
-                id="lessonPoints"
-                rows="3"
-                value={lessonModal.ptsInput}
-                onChange={(e) => setLessonModal(prev => ({ ...prev, ptsInput: e.target.value }))}
-                placeholder="Define variables&#10;Explore floating integers&#10;Dynamically reassign labels"
-                style={{
-                  width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
-                  padding: '8px 12px', color: T.text, fontSize: 12.5, fontFamily: 'inherit', outline: 'none'
-                }}
-              />
-            </div>
-
-            {/* QUIZ SECTION INSIDE LESSON EDIT */}
-            <div style={{ borderTop: `1px solid ${T.border}`, pt: 14, marginTop: 14, marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <HelpCircle size={14} color={T.purple} /> Practice Quiz Questions ({lessonModal.quizQuestions.length})
-                </span>
+            {/* Tab Selectors */}
+            <div style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, marginBottom: 16, gap: 4, overflowX: 'auto' }}>
+              {[
+                { id: 'basic', label: 'Basic Info' },
+                { id: 'content', label: 'Overview Content' },
+                { id: 'coding', label: 'Coding Exercise' },
+                { id: 'quiz', label: 'Practice Quiz' }
+              ].map(tab => (
                 <button
+                  key={tab.id}
                   type="button"
-                  onClick={() => setQuizForm(prev => ({ ...prev, open: true }))}
+                  onClick={() => setActiveLessonTab(tab.id)}
                   style={{
-                    background: 'transparent', border: `1px solid rgba(155, 110, 248, 0.3)`, color: T.purple,
-                    padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer'
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: activeLessonTab === tab.id ? `2px solid ${T.purple}` : 'none',
+                    color: activeLessonTab === tab.id ? T.text : T.muted,
+                    padding: '8px 12px',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    outline: 'none',
+                    whiteSpace: 'nowrap'
                   }}
                 >
-                  <Plus size={12} /> Add Question
+                  {tab.label}
                 </button>
-              </div>
-
-              {/* Quiz form details */}
-              {quizForm.open && (
-                <div style={{ background: T.s2, border: `1px solid rgba(155, 110, 248, 0.25)`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: T.purple }}>New Practice Question</span>
-                    <button type="button" onClick={() => setQuizForm(prev => ({ ...prev, open: false }))} style={{ background: 'transparent', border: 'none', color: T.muted, cursor: 'pointer' }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <input
-                      type="text"
-                      placeholder="Enter quiz question..."
-                      value={quizForm.question}
-                      onChange={(e) => setQuizForm(prev => ({ ...prev, question: e.target.value }))}
-                      style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '7px 10px', color: T.text, fontSize: 12.5, outline: 'none' }}
-                    />
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <input
-                        type="text"
-                        placeholder="Option A (Required)"
-                        value={quizForm.opt1}
-                        onChange={(e) => setQuizForm(prev => ({ ...prev, opt1: e.target.value }))}
-                        style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Option B (Required)"
-                        value={quizForm.opt2}
-                        onChange={(e) => setQuizForm(prev => ({ ...prev, opt2: e.target.value }))}
-                        style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Option C (Optional)"
-                        value={quizForm.opt3}
-                        onChange={(e) => setQuizForm(prev => ({ ...prev, opt3: e.target.value }))}
-                        style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Option D (Optional)"
-                        value={quizForm.opt4}
-                        onChange={(e) => setQuizForm(prev => ({ ...prev, opt4: e.target.value }))}
-                        style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <label htmlFor="quizCorrect" style={{ fontSize: 11.5, color: T.muted }}>Correct Answer Option Index:</label>
-                      <select
-                        id="quizCorrect"
-                        value={quizForm.correct}
-                        onChange={(e) => setQuizForm(prev => ({ ...prev, correct: Number(e.target.value) }))}
-                        style={{ background: T.s3, border: `1px solid ${T.border}`, color: T.text, borderRadius: 6, padding: '4px 8px', fontSize: 12, outline: 'none' }}
-                      >
-                        <option value="0">Option A</option>
-                        <option value="1">Option B</option>
-                        {quizForm.opt3 && <option value="2">Option C</option>}
-                        {quizForm.opt4 && <option value="3">Option D</option>}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={handleAddQuizQuestion}
-                        style={{
-                          marginLeft: 'auto', background: T.purple, color: '#fff', border: 'none',
-                          padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer'
-                        }}
-                      >
-                        Insert
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Questions list display */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 150, overflowY: 'auto' }}>
-                {lessonModal.quizQuestions.map((q, qIdx) => (
-                  <div key={qIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 12px' }}>
-                    <div style={{ fontSize: 12.5, color: T.text }}>
-                      <strong>Q{qIdx + 1}:</strong> {q.question} <span style={{ color: T.green, fontSize: 11, marginLeft: 8 }}>({q.options.length} options, Ans: {String.fromCharCode(65 + q.correct)})</span>
-                    </div>
-                    <button type="button" onClick={() => handleRemoveQuizQuestion(qIdx)} style={{ background: 'transparent', border: 'none', color: T.muted, cursor: 'pointer', padding: 4 }} title="Remove question">
-                      <Trash2 size={13} color={T.red} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
 
-            {/* Lesson Submit Footer buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            {/* TAB CONTENT: BASIC INFO */}
+            {activeLessonTab === 'basic' && (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 14, marginBottom: 14 }}>
+                  {/* Title */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label htmlFor="lessonTitle" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Lesson Title</label>
+                    <input
+                      id="lessonTitle"
+                      type="text"
+                      value={lessonModal.title}
+                      onChange={(e) => setLessonModal(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="e.g. Dynamic Typing"
+                      required
+                      style={{
+                        width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
+                        padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* Duration */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label htmlFor="lessonDur" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Duration</label>
+                    <input
+                      id="lessonDur"
+                      type="text"
+                      value={lessonModal.dur}
+                      onChange={(e) => setLessonModal(prev => ({ ...prev, dur: e.target.value }))}
+                      placeholder="e.g. 10 min"
+                      required
+                      style={{
+                        width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
+                        padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Video ID */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                  <label htmlFor="lessonVid" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>YouTube Video ID (or URL suffix)</label>
+                  <input
+                    id="lessonVid"
+                    type="text"
+                    value={lessonModal.vid}
+                    onChange={(e) => setLessonModal(prev => ({ ...prev, vid: e.target.value }))}
+                    placeholder="e.g. rfscVS0vtbw"
+                    style={{
+                      width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
+                      padding: '8px 12px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none'
+                    }}
+                  />
+                </div>
+
+                {/* Key Points */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                  <label htmlFor="lessonPoints" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Key Study Points (one per line)</label>
+                  <textarea
+                    id="lessonPoints"
+                    rows="3"
+                    value={lessonModal.ptsInput}
+                    onChange={(e) => setLessonModal(prev => ({ ...prev, ptsInput: e.target.value }))}
+                    placeholder="Define variables&#10;Explore floating integers&#10;Dynamically reassign labels"
+                    style={{
+                      width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
+                      padding: '8px 12px', color: T.text, fontSize: 12.5, fontFamily: 'inherit', outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: RICH TEXT OVERVIEW */}
+            {activeLessonTab === 'content' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                <label htmlFor="lessonOverview" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Lesson Content Overview (Markdown Supported)</label>
+                <textarea
+                  id="lessonOverview"
+                  rows="8"
+                  value={lessonModal.overview}
+                  onChange={(e) => setLessonModal(prev => ({ ...prev, overview: e.target.value }))}
+                  placeholder="Welcome to this lesson! Today we will learn about..."
+                  style={{
+                    width: '100%', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8,
+                    padding: '10px 14px', color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
+                  }}
+                />
+              </div>
+            )}
+
+            {/* TAB CONTENT: CODING EXERCISE */}
+            {activeLessonTab === 'coding' && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <input
+                    id="hasExercise"
+                    type="checkbox"
+                    checked={lessonModal.hasExercise}
+                    onChange={(e) => setLessonModal(prev => ({ ...prev, hasExercise: e.target.checked }))}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                  <label htmlFor="hasExercise" style={{ color: T.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    Enable Coding Exercise for this Lesson
+                  </label>
+                </div>
+
+                {lessonModal.hasExercise && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, background: T.s2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 16, maxHeight: 350, overflowY: 'auto' }}>
+                    {/* Language */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label htmlFor="exerciseLanguage" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Programming Language</label>
+                      <select
+                        id="exerciseLanguage"
+                        value={lessonModal.exerciseLanguage}
+                        onChange={(e) => setLessonModal(prev => ({ ...prev, exerciseLanguage: e.target.value }))}
+                        style={{
+                          width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 8,
+                          padding: '8px 12px', color: T.text, fontSize: 13, outline: 'none'
+                        }}
+                      >
+                        <option value="python">Python 3 (WASM Pyodide)</option>
+                        <option value="javascript">JavaScript (Client Eval)</option>
+                      </select>
+                    </div>
+
+                    {/* Instructions */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label htmlFor="exerciseInstruction" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Exercise Instructions (Markdown supported)</label>
+                      <textarea
+                        id="exerciseInstruction"
+                        rows="3"
+                        value={lessonModal.exerciseInstruction}
+                        onChange={(e) => setLessonModal(prev => ({ ...prev, exerciseInstruction: e.target.value }))}
+                        placeholder="Write a function `add(a, b)` that returns their sum."
+                        style={{
+                          width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 8,
+                          padding: '8px 12px', color: T.text, fontSize: 12.5, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    {/* Starter Code */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label htmlFor="exerciseStarter" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Starter Code Template</label>
+                      <textarea
+                        id="exerciseStarter"
+                        rows="4"
+                        value={lessonModal.exerciseStarterCode}
+                        onChange={(e) => setLessonModal(prev => ({ ...prev, exerciseStarterCode: e.target.value }))}
+                        placeholder="def add(a, b):&#10;    # Write code here&#10;    pass"
+                        style={{
+                          width: '100%', background: '#090D16', border: `1px solid ${T.border}`, borderRadius: 8,
+                          padding: '8px 12px', color: '#5BF8A9', fontSize: 12.5, fontFamily: 'monospace', outline: 'none', resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    {/* Solution Code */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label htmlFor="exerciseSolution" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Reference Solution Code (Optional)</label>
+                      <textarea
+                        id="exerciseSolution"
+                        rows="4"
+                        value={lessonModal.exerciseSolutionCode}
+                        onChange={(e) => setLessonModal(prev => ({ ...prev, exerciseSolutionCode: e.target.value }))}
+                        placeholder="def add(a, b):&#10;    return a + b"
+                        style={{
+                          width: '100%', background: '#090D16', border: `1px solid ${T.border}`, borderRadius: 8,
+                          padding: '8px 12px', color: '#5B8CF8', fontSize: 12.5, fontFamily: 'monospace', outline: 'none', resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    {/* Test Cases / Assertions */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <label htmlFor="exerciseTests" style={{ color: T.text, fontSize: 12, fontWeight: 500 }}>Test Cases / Assertions (One Python assertion statement per line)</label>
+                      <textarea
+                        id="exerciseTests"
+                        rows="4"
+                        value={lessonModal.exerciseTestCases}
+                        onChange={(e) => setLessonModal(prev => ({ ...prev, exerciseTestCases: e.target.value }))}
+                        placeholder="assert add(2, 3) == 5, 'add(2, 3) must equal 5'&#10;assert add(-1, 1) == 0, 'add(-1, 1) must equal 0'"
+                        style={{
+                          width: '100%', background: '#090D16', border: `1px solid ${T.border}`, borderRadius: 8,
+                          padding: '8px 12px', color: '#F5A95B', fontSize: 12.5, fontFamily: 'monospace', outline: 'none', resize: 'vertical'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: PRACTICE QUIZ */}
+            {activeLessonTab === 'quiz' && (
+              <div>
+                <div style={{ borderTop: `1px solid ${T.border}`, pt: 14, marginTop: 4, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <HelpCircle size={14} color={T.purple} /> Practice Quiz Questions ({lessonModal.quizQuestions.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQuizForm(prev => ({ ...prev, open: true }))}
+                      style={{
+                        background: 'transparent', border: `1px solid rgba(155, 110, 248, 0.3)`, color: T.purple,
+                        padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer'
+                      }}
+                    >
+                      <Plus size={12} /> Add Question
+                    </button>
+                  </div>
+
+                  {/* Quiz form details */}
+                  {quizForm.open && (
+                    <div style={{ background: T.s2, border: `1px solid rgba(155, 110, 248, 0.25)`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: T.purple }}>New Practice Question</span>
+                        <button type="button" onClick={() => setQuizForm(prev => ({ ...prev, open: false }))} style={{ background: 'transparent', border: 'none', color: T.muted, cursor: 'pointer' }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <input
+                          type="text"
+                          placeholder="Enter quiz question..."
+                          value={quizForm.question}
+                          onChange={(e) => setQuizForm(prev => ({ ...prev, question: e.target.value }))}
+                          style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '7px 10px', color: T.text, fontSize: 12.5, outline: 'none' }}
+                        />
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <input
+                            type="text"
+                            placeholder="Option A (Required)"
+                            value={quizForm.opt1}
+                            onChange={(e) => setQuizForm(prev => ({ ...prev, opt1: e.target.value }))}
+                            style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Option B (Required)"
+                            value={quizForm.opt2}
+                            onChange={(e) => setQuizForm(prev => ({ ...prev, opt2: e.target.value }))}
+                            style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Option C (Optional)"
+                            value={quizForm.opt3}
+                            onChange={(e) => setQuizForm(prev => ({ ...prev, opt3: e.target.value }))}
+                            style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Option D (Optional)"
+                            value={quizForm.opt4}
+                            onChange={(e) => setQuizForm(prev => ({ ...prev, opt4: e.target.value }))}
+                            style={{ width: '100%', background: T.s3, border: `1px solid ${T.border}`, borderRadius: 6, padding: '6px 8px', color: T.text, fontSize: 12, outline: 'none' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <label htmlFor="quizCorrect" style={{ fontSize: 11.5, color: T.muted }}>Correct Answer Index:</label>
+                          <select
+                            id="quizCorrect"
+                            value={quizForm.correct}
+                            onChange={(e) => setQuizForm(prev => ({ ...prev, correct: Number(e.target.value) }))}
+                            style={{ background: T.s3, border: `1px solid ${T.border}`, color: T.text, borderRadius: 6, padding: '4px 8px', fontSize: 12, outline: 'none' }}
+                          >
+                            <option value="0">Option A</option>
+                            <option value="1">Option B</option>
+                            {quizForm.opt3 && <option value="2">Option C</option>}
+                            {quizForm.opt4 && <option value="3">Option D</option>}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={handleAddQuizQuestion}
+                            style={{
+                              marginLeft: 'auto', background: T.purple, color: '#fff', border: 'none',
+                              padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: 'pointer'
+                            }}
+                          >
+                            Insert
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Questions list display */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 150, overflowY: 'auto' }}>
+                    {lessonModal.quizQuestions.map((q, qIdx) => (
+                      <div key={qIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 12.5, color: T.text }}>
+                          <strong>Q{qIdx + 1}:</strong> {q.question} <span style={{ color: T.green, fontSize: 11, marginLeft: 8 }}>({q.options.length} options, Ans: {String.fromCharCode(65 + q.correct)})</span>
+                        </div>
+                        <button type="button" onClick={() => handleRemoveQuizQuestion(qIdx)} style={{ background: 'transparent', border: 'none', color: T.muted, cursor: 'pointer', padding: 4 }} title="Remove question">
+                          <Trash2 size={13} color={T.red} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ borderTop: `1px solid ${T.border}`, padding: '14px 0 0 0', marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button
                 type="button"
                 onClick={() => setLessonModal(prev => ({ ...prev, open: false }))}

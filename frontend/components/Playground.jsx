@@ -16,13 +16,34 @@ export default function Playground({
   codeOverride = null,
   explanationOverride = null,
   onTraceComplete = null,
-  onCodeChange = null
+  onCodeChange = null,
+  codingExercise = null,
+  onVerifySuccess = null
 }) {
-  const [code, setCode] = useState(initialCode);
+  const getInitialCode = () => {
+    if (codingExercise?.hasExercise && codingExercise.starterCode) {
+      return codingExercise.starterCode;
+    }
+    return initialCode;
+  };
+
+  const [code, setCode] = useState(getInitialCode);
   const [activeTab, setActiveTab] = useState('console');
   const [explanation, setExplanation] = useState('');
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const pendingTraceRef = useRef(null);
+  const [assertionResults, setAssertionResults] = useState([]);
+  const [verifyState, setVerifyState] = useState('idle'); // 'idle' | 'verifying' | 'success' | 'failed'
+
+  useEffect(() => {
+    if (codingExercise?.hasExercise && codingExercise.starterCode) {
+      setCode(codingExercise.starterCode);
+    } else {
+      setCode(initialCode);
+    }
+    setVerifyState('idle');
+    setAssertionResults([]);
+  }, [codingExercise, initialCode]);
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
@@ -92,6 +113,27 @@ export default function Playground({
 
   // Hook callbacks
   const onStdout = (text) => {
+    if (text.includes("__TEST_RESULTS__:")) {
+      const parts = text.split("__TEST_RESULTS__:");
+      const jsonStr = parts[1];
+      if (parts[0] && terminalInstanceRef.current) {
+        terminalInstanceRef.current.write(parts[0]);
+      }
+      try {
+        const results = JSON.parse(jsonStr.trim());
+        setAssertionResults(results);
+        const allPassed = results.length > 0 && results.every(r => r.passed);
+        if (allPassed) {
+          setVerifyState('success');
+          if (onVerifySuccess) onVerifySuccess();
+        } else {
+          setVerifyState('failed');
+        }
+      } catch (e) {
+        console.error("Failed to parse test results:", e);
+      }
+      return;
+    }
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.write(text);
     }
@@ -110,6 +152,10 @@ export default function Playground({
   };
 
   const onFinish = () => {
+    if (verifyState === 'verifying' && assertionResults.length === 0) {
+      setVerifyState('failed');
+      setAssertionResults([{ expr: "Execution check", passed: false, msg: "Script completed but verification assertions failed or didn't run." }]);
+    }
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.write('\n\x1b[90m--- Program finished ---\x1b[0m\n');
     }
@@ -117,6 +163,10 @@ export default function Playground({
 
   const onError = (msg) => {
     setIsTracing(false);
+    if (verifyState === 'verifying') {
+      setVerifyState('failed');
+      setAssertionResults([{ expr: "Execution check", passed: false, msg: msg }]);
+    }
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.write(`\x1b[31mError: ${msg}\x1b[0m\n`);
     }
@@ -329,6 +379,8 @@ export default function Playground({
 
   const handleRun = () => {
     if (!isReady || isRunning) return;
+    setVerifyState('idle');
+    setAssertionResults([]);
     setActiveTab('console');
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.clear();
@@ -347,6 +399,35 @@ export default function Playground({
 
     // Execute code in Console
     runCode(code);
+  };
+
+  const handleVerify = () => {
+    if (!isReady || isRunning) return;
+    setVerifyState('verifying');
+    setAssertionResults([]);
+    setActiveTab('console');
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.clear();
+      terminalInstanceRef.current.writeln('\x1b[90mVerifying solution against assertions...\x1b[0m');
+    }
+
+    const testCases = codingExercise?.testCases || [];
+    let validationCode = code + "\n\n";
+    validationCode += "import json\n__results = []\n";
+    for (const testCase of testCases) {
+      validationCode += `
+try:
+    ${testCase}
+    __results.append({"expr": ${JSON.stringify(testCase)}, "passed": True})
+except AssertionError as e:
+    __results.append({"expr": ${JSON.stringify(testCase)}, "passed": False, "msg": str(e) or "Assertion failed"})
+except Exception as e:
+    __results.append({"expr": ${JSON.stringify(testCase)}, "passed": False, "msg": f"Error: {str(e)}"})
+`;
+    }
+    validationCode += '\nprint("__TEST_RESULTS__:" + json.dumps(__results))\n';
+
+    runCode(validationCode);
   };
 
   const handleClear = () => {
@@ -502,9 +583,35 @@ export default function Playground({
               fontFamily: 'inherit'
             }}
           >
-            {isRunning && activeTab === 'console' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="#000" />}
+            {isRunning && activeTab === 'console' && verifyState !== 'verifying' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="#000" />}
             Run
           </button>
+
+          {codingExercise?.hasExercise && (
+            <button
+              onClick={handleVerify}
+              disabled={!isReady || isRunning || isTracing}
+              style={{
+                background: (!isReady || isRunning || isTracing) ? 'rgba(255, 255, 255, 0.08)' : '#9B6EF8',
+                color: '#fff',
+                border: 'none',
+                padding: '6px 14px',
+                borderRadius: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: (!isReady || isRunning || isTracing) ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                opacity: (!isReady || isRunning || isTracing) ? 0.6 : 1,
+                transition: 'all 0.15s',
+                fontFamily: 'inherit'
+              }}
+            >
+              {verifyState === 'verifying' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={13} />}
+              Verify Solution
+            </button>
+          )}
         </div>
 
         {/* Status Indicator */}
@@ -518,7 +625,7 @@ export default function Playground({
             ) : isRunning ? (
               <>
                 <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
-                <span style={{ color: '#5B8CF8' }}>Running Code...</span>
+                <span style={{ color: '#5B8CF8' }}>{verifyState === 'verifying' ? 'Verifying...' : 'Running Code...'}</span>
               </>
             ) : isTracing ? (
               <>
@@ -540,364 +647,428 @@ export default function Playground({
         </div>
       </div>
 
-      {/* Editor & Bottom Panels (Vertical Flex) */}
-      <div 
-        ref={editorPanelRef}
-        style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100% - 50px)', overflowY: 'auto' }}
-      >
-        {/* Code Editor Container */}
-        <div style={{ minHeight: 100, background: '#06080C' }}>
-          <CodeMirror
-            value={code}
-            theme="dark"
-            extensions={[python()]}
-            onChange={(value) => handleCodeChange(value)}
-            onCreateEditor={(view) => {
-              editorViewRef.current = view;
-            }}
-            style={{ fontSize: 13, fontFamily: 'monospace' }}
-          />
-        </div>
-
-        {/* Resize Handle */}
-        <div
-          onMouseDown={handlePanelMouseDown}
-          style={{
-            height: 5,
-            cursor: 'row-resize',
-            background: 'rgba(255, 255, 255, 0.08)',
-            transition: 'background 0.2s',
-            zIndex: 10,
-            width: '100%',
-            flexShrink: 0
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = '#5B8CF8'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-        />
-
-        {/* Tab Selection Header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: '#080A0E',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          padding: '0 10px',
-          height: 36,
-          flexShrink: 0
-        }}>
-          <button
-            onClick={() => setActiveTab('console')}
-            style={{
-              background: activeTab === 'console' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'console' ? `2px solid #5B8CF8` : 'none',
-              color: activeTab === 'console' ? '#F8FAFC' : '#8892B0',
-              padding: '6px 16px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontFamily: 'inherit',
-              outline: 'none',
-              transition: 'all 0.15s'
-            }}
-          >
-            Console
-          </button>
-          <button
-            onClick={() => setActiveTab('visualizer')}
-            style={{
-              background: activeTab === 'visualizer' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'visualizer' ? `2px solid #F5A95B` : 'none',
-              color: activeTab === 'visualizer' ? '#F8FAFC' : '#8892B0',
-              padding: '6px 16px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontFamily: 'inherit',
-              outline: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.15s'
-            }}
-          >
-            {isTracing ? (
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} color="#F5A95B" />
-            ) : (
-              <Sparkles size={11} color={traceData ? '#F5A95B' : 'currentColor'} />
-            )}
-            Visualizer {traceData ? `(${traceData.length} Steps)` : ''}
-          </button>
-          <button
-            onClick={() => setActiveTab('explanation')}
-            style={{
-              background: activeTab === 'explanation' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'explanation' ? `2px solid #22C5A0` : 'none',
-              color: activeTab === 'explanation' ? '#F8FAFC' : '#8892B0',
-              padding: '6px 16px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontFamily: 'inherit',
-              outline: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.15s'
-            }}
-          >
-            {isGeneratingExplanation ? (
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} color="#22C5A0" />
-            ) : (
-              <BookOpen size={11} color={explanation ? '#22C5A0' : 'currentColor'} />
-            )}
-            Explanation
-          </button>
-        </div>
-
-        {/* Tab Content Area */}
-        <div style={{ height: panelHeight, flexGrow: 1, flexShrink: 0, position: 'relative', overflow: 'hidden', background: '#040508' }}>
-          
-          {/* Console Tab Content */}
-          <div
-            ref={terminalElRef}
-            className="tab-pane"
-            style={{
-              display: activeTab === 'console' ? 'block' : 'none',
-              width: '100%',
-              height: '100%',
-              padding: '8px 12px',
-              overflow: 'hidden',
-              background: '#040508'
-            }}
-          />
-
-          {/* Visualizer Tab Content */}
-          <div className="tab-pane" style={{
-            display: activeTab === 'visualizer' ? 'flex' : 'none',
-            flexDirection: 'column',
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden'
-          }}>
-            {/* 1. If Loading or empty trace */}
-            {isTracing && (
-              <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#8892B0' }}>
-                <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                <span style={{ fontSize: 13 }}>Generating step-by-step trace timeline...</span>
-              </div>
-            )}
-
-            {!isTracing && !traceData && (
-              <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', color: '#8892B0', gap: 8 }}>
-                <Sparkles size={24} color="#F5A95B" />
-                <span style={{ fontSize: 13, maxWidth: 360 }}>
-                  No active trace loaded. Write Python code and click <strong>Run Trace</strong> or click <strong>Visualize Code</strong> in the chatbot below!
-                </span>
-              </div>
-            )}
-
-            {/* 2. Timeline player & visualizer panels */}
-            {!isTracing && traceData && (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden' }}>
-                
-                {/* Media Player Controls */}
-                <div style={{
-                  padding: '8px 16px',
-                  background: '#080A0E',
-                  borderBottom: `1px solid rgba(255, 255, 255, 0.08)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexShrink: 0
-                }}>
-                  {/* Play/Pause */}
-                  <button
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    style={{
-                      background: 'none', border: 'none', color: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4
-                    }}
-                    title={isPlaying ? "Pause execution" : "Auto play timeline"}
-                  >
-                    {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
-                  </button>
-
-                  {/* Nav Step */}
-                  <button
-                    onClick={() => { setIsPlaying(false); setCurrentStep(prev => Math.max(prev - 1, 0)); }}
-                    disabled={currentStep === 0}
-                    style={{
-                      background: 'none', border: 'none', color: currentStep === 0 ? '#3A4560' : '#F8FAFC', cursor: currentStep === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', padding: 4
-                    }}
-                    title="Previous step"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-
-                  <button
-                    onClick={() => { setIsPlaying(false); setCurrentStep(prev => Math.min(prev + 1, traceData.length - 1)); }}
-                    disabled={currentStep === traceData.length - 1}
-                    style={{
-                      background: 'none', border: 'none', color: currentStep === traceData.length - 1 ? '#3A4560' : '#F8FAFC', cursor: currentStep === traceData.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', padding: 4
-                    }}
-                    title="Next step"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-
-                  {/* Scrubbing Slider */}
-                  <input
-                    type="range"
-                    min={0}
-                    max={traceData.length - 1}
-                    value={currentStep}
-                    onChange={(e) => { setIsPlaying(false); setCurrentStep(Number(e.target.value)); }}
-                    style={{
-                      flex: 1,
-                      accentColor: '#F5A95B',
-                      cursor: 'pointer',
-                      height: 4
-                    }}
-                  />
-
-                  {/* Step Counts */}
-                  <span style={{ fontSize: 11.5, color: '#8892B0', fontWeight: 600, fontFamily: 'monospace' }}>
-                    Step {currentStep + 1} of {traceData.length}
-                  </span>
-                </div>
-
-                {/* Left/Right Panels Layout */}
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                  
-                  {/* Variable Visualizer Panel (Full Width) */}
-                  <div className="sandbox-scroll" style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: 14,
-                    background: '#040508'
-                  }}>
-                    <div style={{ fontSize: 11, color: '#8892B0', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>Local Variables Scope</div>
-                    {renderVariables()}
-                  </div>
-
-                </div>
-
-              </div>
-            )}
-
-          </div>
-
-          {/* Explanation Tab Content */}
-          <div className="tab-pane sandbox-scroll" style={{
-            display: activeTab === 'explanation' ? 'block' : 'none',
-            width: '100%',
-            height: '100%',
-            padding: 16,
+      {/* Main Split Area */}
+      <div style={{ display: 'flex', flex: 1, height: 'calc(100% - 48px)', overflow: 'hidden', flexDirection: isMobile ? 'column' : 'row' }}>
+        
+        {/* Left Side: Exercise Instructions (rendered only if exercise is enabled) */}
+        {codingExercise?.hasExercise && (
+          <div style={{
+            width: isMobile ? '100%' : '38%',
+            borderRight: isMobile ? 'none' : '1px solid rgba(255, 255, 255, 0.08)',
+            borderBottom: isMobile ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
+            height: isMobile ? '40%' : '100%',
             overflowY: 'auto',
-            background: '#040508',
-            color: '#F8FAFC'
-          }}>
-            {!explanation && !isGeneratingExplanation ? (
-              <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', color: '#8892B0', gap: 8 }}>
-                <BookOpen size={24} color="#22C5A0" />
-                <span style={{ fontSize: 13, maxWidth: 360 }}>
-                  No active explanation loaded. Click <strong>Visualize Code</strong> in the chatbot below to view the explanation here!
-                </span>
-              </div>
-            ) : isGeneratingExplanation && !explanation ? (
-              <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#8892B0' }}>
-                <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} color="#22C5A0" />
-                <span style={{ fontSize: 13 }}>Generating step-by-step code explanation...</span>
-              </div>
-            ) : (
-              <div className="md-content" style={{ fontSize: 14, lineHeight: 1.7 }}>
+            padding: 20,
+            background: '#090D16',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20
+          }} className="sandbox-scroll">
+            <div>
+              <h4 style={{ color: '#9B6EF8', fontSize: 13, fontWeight: 700, margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Exercise Instructions
+              </h4>
+              <div style={{ color: '#C4CFE5', fontSize: 13.5, lineHeight: 1.6 }} className="tab-pane md-content">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {explanation}
+                  {codingExercise.instruction || "*No instructions provided.*"}
                 </ReactMarkdown>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Console Clear Button (when Console tab is active) */}
-          {activeTab === 'console' && (
-            <button
-              onClick={handleClear}
-              title="Clear Console"
+            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: 16 }}>
+              <h4 style={{ color: '#22C5A0', fontSize: 13, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Test Cases & Assertions
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {verifyState === 'success' && (
+                  <div style={{ background: 'rgba(34, 197, 160, 0.1)', border: '1px solid rgba(34, 197, 160, 0.25)', borderRadius: 8, padding: 12, display: 'flex', alignItems: 'center', gap: 10, color: '#22C5A0', fontSize: 13, fontWeight: 600 }}>
+                    <Sparkles size={16} />
+                    <span>All test cases passed! Excellent! 🎉</span>
+                  </div>
+                )}
+
+                {verifyState === 'failed' && (
+                  <div style={{ background: 'rgba(245, 91, 107, 0.1)', border: '1px solid rgba(245, 91, 107, 0.25)', borderRadius: 8, padding: 12, display: 'flex', alignItems: 'center', gap: 10, color: '#F55B6B', fontSize: 13, fontWeight: 600 }}>
+                    <AlertCircle size={16} />
+                    <span>Some assertions failed. Check details below.</span>
+                  </div>
+                )}
+
+                {(codingExercise.testCases || []).map((tc, tcIdx) => {
+                  const tcResult = assertionResults.find(r => r.expr === tc);
+                  let status = 'idle'; 
+                  if (verifyState === 'verifying') status = 'verifying';
+                  else if (tcResult) status = tcResult.passed ? 'passed' : 'failed';
+
+                  return (
+                    <div key={tcIdx} style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      background: '#0D111A',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: 8,
+                      padding: 10
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {status === 'verifying' && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: '#9B6EF8' }} />}
+                        {status === 'passed' && <CheckCircle size={13} color="#22C5A0" />}
+                        {status === 'failed' && <X size={13} color="#F55B6B" />}
+                        {status === 'idle' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#8892B0' }} />}
+                        
+                        <span style={{ fontFamily: 'monospace', fontSize: 11.5, color: status === 'failed' ? '#F55B6B' : status === 'passed' ? '#22C5A0' : '#8892B0', wordBreak: 'break-all' }}>
+                          {tc}
+                        </span>
+                      </div>
+                      {tcResult && !tcResult.passed && tcResult.msg && (
+                        <span style={{ fontSize: 10.5, color: '#F55B6B', marginLeft: 21, fontFamily: 'monospace' }}>
+                          Reason: {tcResult.msg}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Right Side: Code Editor & Console Panels */}
+        <div style={{
+          flex: 1,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          {/* Editor & Bottom Panels (Vertical Flex) */}
+          <div 
+            ref={editorPanelRef}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}
+          >
+            {/* Code Editor Container */}
+            <div style={{ flex: 1, minHeight: 120, background: '#06080C', overflowY: 'auto' }}>
+              <CodeMirror
+                value={code}
+                theme="dark"
+                extensions={[python()]}
+                onChange={(value) => handleCodeChange(value)}
+                onCreateEditor={(view) => {
+                  editorViewRef.current = view;
+                }}
+                style={{ fontSize: 13, fontFamily: 'monospace' }}
+              />
+            </div>
+
+            {/* Resize Handle */}
+            <div
+              onMouseDown={handlePanelMouseDown}
               style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: 6,
-                color: '#647298',
-                cursor: 'pointer',
-                padding: 6,
+                height: 5,
+                cursor: 'row-resize',
+                background: 'rgba(255, 255, 255, 0.08)',
+                transition: 'background 0.2s',
+                zIndex: 10,
+                width: '100%',
+                flexShrink: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#5B8CF8'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+            />
+
+            {/* Console / Explanation Panel */}
+            <div style={{ height: panelHeight, display: 'flex', flexDirection: 'column', background: '#06080C', flexShrink: 0, position: 'relative' }}>
+              {/* Tab Selection Header */}
+              <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                transition: 'color 0.15s, background 0.15s',
-                zIndex: 10
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#F8FAFC'; e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#647298'; e.currentTarget.style.background = 'rgba(0,0,0,0.4)'; }}
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
+                background: '#080A0E',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '0 10px',
+                height: 36,
+                flexShrink: 0
+              }}>
+                <button
+                  onClick={() => setActiveTab('console')}
+                  style={{
+                    background: activeTab === 'console' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                    border: 'none',
+                    borderBottom: activeTab === 'console' ? `2px solid #5B8CF8` : 'none',
+                    color: activeTab === 'console' ? '#F8FAFC' : '#8892B0',
+                    padding: '6px 16px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  Console
+                </button>
+                <button
+                  onClick={() => setActiveTab('visualizer')}
+                  style={{
+                    background: activeTab === 'visualizer' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                    border: 'none',
+                    borderBottom: activeTab === 'visualizer' ? `2px solid #F5A95B` : 'none',
+                    color: activeTab === 'visualizer' ? '#F8FAFC' : '#8892B0',
+                    padding: '6px 16px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isTracing ? (
+                    <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} color="#F5A95B" />
+                  ) : (
+                    <Sparkles size={11} color={traceData ? '#F5A95B' : 'currentColor'} />
+                  )}
+                  Visualizer {traceData ? `(${traceData.length} Steps)` : ''}
+                </button>
+                <button
+                  onClick={() => setActiveTab('explanation')}
+                  style={{
+                    background: activeTab === 'explanation' ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                    border: 'none',
+                    borderBottom: activeTab === 'explanation' ? `2px solid #22C5A0` : 'none',
+                    color: activeTab === 'explanation' ? '#F8FAFC' : '#8892B0',
+                    padding: '6px 16px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isGeneratingExplanation ? (
+                    <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} color="#22C5A0" />
+                  ) : (
+                    <BookOpen size={11} color={explanation ? '#22C5A0' : 'currentColor'} />
+                  )}
+                  Explanation
+                </button>
+              </div>
 
+              {/* Tab Content Area */}
+              <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#040508' }}>
+                {/* Console Tab Content */}
+                <div
+                  ref={terminalElRef}
+                  className="tab-pane"
+                  style={{
+                    display: activeTab === 'console' ? 'block' : 'none',
+                    width: '100%',
+                    height: '100%',
+                    padding: '8px 12px',
+                    overflow: 'hidden',
+                    background: '#040508'
+                  }}
+                />
+
+                {/* Visualizer Tab Content */}
+                <div className="tab-pane" style={{
+                  display: activeTab === 'visualizer' ? 'flex' : 'none',
+                  flexDirection: 'column',
+                  width: '100%',
+                  height: '100%',
+                  overflow: 'hidden'
+                }}>
+                  {/* 1. If Loading or empty trace */}
+                  {isTracing && (
+                    <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#8892B0' }}>
+                      <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span style={{ fontSize: 13 }}>Generating step-by-step trace timeline...</span>
+                    </div>
+                  )}
+
+                  {!isTracing && !traceData && (
+                    <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', color: '#8892B0', gap: 8 }}>
+                      <Sparkles size={24} color="#F5A95B" />
+                      <span style={{ fontSize: 13, maxWidth: 360 }}>
+                        Run your code first to generate a trace timeline and inspect Python execution step-by-step.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 2. Step Player Controls */}
+                  {traceData && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      flex: 1,
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        padding: '10px 14px',
+                        background: '#080A0E',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexShrink: 0
+                      }}>
+                        {/* Play/Pause/Prev/Next buttons */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <button
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            style={{
+                              background: '#F5A95B',
+                              color: '#000',
+                              border: 'none',
+                              padding: '5px 10px',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                          >
+                            {isPlaying ? <Pause size={10} fill="#000" /> : <Play size={10} fill="#000" />}
+                            {isPlaying ? 'Pause' : 'Auto Play'}
+                          </button>
+
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button
+                              disabled={currentStep === 0}
+                              onClick={() => { setIsPlaying(false); setCurrentStep(prev => prev - 1); }}
+                              style={{
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: currentStep === 0 ? '#4A5568' : '#F8FAFC',
+                                padding: 5,
+                                borderRadius: 4,
+                                cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <ChevronLeft size={12} />
+                            </button>
+                            <button
+                              disabled={currentStep === traceData.length - 1}
+                              onClick={() => { setIsPlaying(false); setCurrentStep(prev => prev + 1); }}
+                              style={{
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: currentStep === traceData.length - 1 ? '#4A5568' : '#F8FAFC',
+                                padding: 5,
+                                borderRadius: 4,
+                                cursor: currentStep === traceData.length - 1 ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <ChevronRight size={12} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Step Counts */}
+                        <span style={{ fontSize: 11.5, color: '#8892B0', fontWeight: 600, fontFamily: 'monospace' }}>
+                          Step {currentStep + 1} of {traceData.length}
+                        </span>
+                      </div>
+
+                      {/* Variables scope */}
+                      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                        <div className="sandbox-scroll" style={{
+                          flex: 1,
+                          overflowY: 'auto',
+                          padding: 14,
+                          background: '#040508'
+                        }}>
+                          <div style={{ fontSize: 11, color: '#8892B0', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>Local Variables Scope</div>
+                          {renderVariables()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Explanation Tab Content */}
+                <div className="tab-pane sandbox-scroll" style={{
+                  display: activeTab === 'explanation' ? 'block' : 'none',
+                  width: '100%',
+                  height: '100%',
+                  padding: 16,
+                  overflowY: 'auto',
+                  background: '#040508',
+                  color: '#F8FAFC'
+                }}>
+                  {!explanation && !isGeneratingExplanation ? (
+                    <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', color: '#8892B0', gap: 8 }}>
+                      <BookOpen size={24} color="#22C5A0" />
+                      <span style={{ fontSize: 13, maxWidth: 360 }}>
+                        No active explanation loaded. Run your code to generate explanation or trace details.
+                      </span>
+                    </div>
+                  ) : isGeneratingExplanation && !explanation ? (
+                    <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#8892B0' }}>
+                      <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} color="#22C5A0" />
+                      <span style={{ fontSize: 13 }}>Generating step-by-step code explanation...</span>
+                    </div>
+                  ) : (
+                    <div className="md-content" style={{ fontSize: 14, lineHeight: 1.7 }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {explanation}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+
+                {/* Console Clear Button (when Console tab is active) */}
+                {activeTab === 'console' && (
+                  <button
+                    onClick={handleClear}
+                    title="Clear Console"
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: 6,
+                      color: '#647298',
+                      cursor: 'pointer',
+                      padding: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      transition: 'color 0.15s, background 0.15s',
+                      zIndex: 10
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
+
       </div>
+
       <style>{`
-        /* CodeMirror deep obsidian override */
-        .cm-editor {
-          background-color: #06080C !important;
-        }
-        .cm-editor .cm-scroller {
-          background-color: #06080C !important;
-        }
-        .cm-gutters {
-          background-color: #06080C !important;
-          border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-          color: rgba(255, 255, 255, 0.3) !important;
-        }
-        .cm-activeLine {
-          background-color: rgba(91, 140, 248, 0.05) !important;
-          border-left: 3px solid #5B8CF8 !important;
-          box-shadow: inset 5px 0 10px -5px rgba(91, 140, 248, 0.25);
-          animation: line-pulse 2s infinite ease-in-out;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-        }
-        .cm-activeLineGutter {
-          background-color: rgba(91, 140, 248, 0.12) !important;
-          color: #5B8CF8 !important;
-        }
-        .cm-selectionBackground {
-          background: rgba(91, 140, 248, 0.08) !important;
-        }
-        
-        @keyframes line-pulse {
-          0%, 100% { background-color: rgba(91, 140, 248, 0.04); }
-          50% { background-color: rgba(91, 140, 248, 0.12); }
-        }
-
-        /* Tab content transition */
-        .tab-pane {
-          animation: tab-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-        @keyframes tab-fade-in {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
         /* Staggered variable card slide-in */
         .variable-card {
           animation: card-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
