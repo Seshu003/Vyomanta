@@ -223,33 +223,34 @@ export default function Playground({
     onTraceResult
   });
 
-  // Trigger trace runner once console execution is finished
+  // Trigger trace runner once Pyodide is ready and console execution is finished
   useEffect(() => {
-    if (!isRunning && pendingTraceRef.current !== null) {
+    if (isReady && !isRunning && pendingTraceRef.current !== null) {
       const codeToTrace = pendingTraceRef.current;
       pendingTraceRef.current = null;
       setIsTracing(true);
       setTraceError(null);
       runTrace(codeToTrace);
     }
-  }, [isRunning, runTrace]);
+  }, [isReady, isRunning, runTrace]);
 
   // Handle parent code overrides
   useEffect(() => {
     if (codeOverride !== null) {
-      pendingTraceRef.current = null;
       handleCodeChange(codeOverride);
       setActiveTab('visualizer');
       setIsTracing(true);
       setTraceData(null);
       setTraceError(null);
-      // Wait for Pyodide worker to be ready to trace
-      const timer = setTimeout(() => {
+      
+      if (isReady && !isRunning) {
+        pendingTraceRef.current = null;
         runTrace(codeOverride);
-      }, 500);
-      return () => clearTimeout(timer);
+      } else {
+        pendingTraceRef.current = codeOverride;
+      }
     }
-  }, [codeOverride, runTrace]);
+  }, [codeOverride, isReady, isRunning, runTrace]);
 
   // Auto-play interval
   useEffect(() => {
