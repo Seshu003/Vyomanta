@@ -11,14 +11,25 @@ const dev = process.env.NODE_ENV !== 'production';
 const nextApp = next({ dev });
 const handle = nextApp.getRequestHandler();
 
-let aiClient = null;
+const GEMINI_KEYS = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4
+].filter(Boolean);
+
+let connectionCount = 0;
+
 function getGeminiClient() {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1;
-    if (!apiKey) throw new Error('GEMINI_API_KEY environment variable is required.');
-    aiClient = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+  if (GEMINI_KEYS.length === 0) {
+    throw new Error('GEMINI_API_KEY environment variable is required.');
   }
-  return aiClient;
+  // Rotate key round-robin based on incoming connection count to distribute concurrent free-tier session load
+  const apiKey = GEMINI_KEYS[connectionCount % GEMINI_KEYS.length];
+  connectionCount++;
+  console.log(`[VoiceWSCombined] Routing connection using Gemini Key index ${(connectionCount - 1) % GEMINI_KEYS.length}`);
+  return new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
 }
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
