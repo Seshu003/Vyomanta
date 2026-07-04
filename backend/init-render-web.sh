@@ -86,6 +86,21 @@ cat <<EOF > sites/lms.render/site_config.json
 }
 EOF
 
+# Parse FRONTEND_URL to configure allow_cors correctly (supporting single, multiple comma-separated, or wildcard origins)
+python3 -c "
+import json, os
+path = 'sites/lms.render/site_config.json'
+with open(path, 'r') as f:
+    config = json.load(f)
+frontend_url = os.environ.get('FRONTEND_URL') or '*'
+if ',' in frontend_url:
+    config['allow_cors'] = [u.strip() for u in frontend_url.split(',') if u.strip()]
+else:
+    config['allow_cors'] = frontend_url.strip()
+with open(path, 'w') as f:
+    json.dump(config, f, indent=4)
+"
+
 # Route Redis traffic to internal local instance
 bench set-redis-cache-host redis://127.0.0.1:6379
 bench set-redis-queue-host redis://127.0.0.1:6379
@@ -118,7 +133,19 @@ if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/
     
     # Restore SSL and CORS configurations to site_config.json
     bench --site lms.render set-config db_ssl_ca "/etc/ssl/certs/ca-certificates.crt"
-    bench --site lms.render set-config allow_cors "${FRONTEND_URL:-*}"
+    python3 -c "
+import json, os
+path = 'sites/lms.render/site_config.json'
+with open(path, 'r') as f:
+    config = json.load(f)
+frontend_url = os.environ.get('FRONTEND_URL') or '*'
+if ',' in frontend_url:
+    config['allow_cors'] = [u.strip() for u in frontend_url.split(',') if u.strip()]
+else:
+    config['allow_cors'] = frontend_url.strip()
+with open(path, 'w') as f:
+    json.dump(config, f, indent=4)
+"
 
     # Install payments and LMS apps
     echo "Installing payments & lms applications..."
@@ -126,7 +153,19 @@ if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/
     bench --site lms.render install-app lms
 else
     echo "Database is already seeded. Connecting to existing database tables..."
-    bench --site lms.render set-config allow_cors "${FRONTEND_URL:-*}"
+    python3 -c "
+import json, os
+path = 'sites/lms.render/site_config.json'
+with open(path, 'r') as f:
+    config = json.load(f)
+frontend_url = os.environ.get('FRONTEND_URL') or '*'
+if ',' in frontend_url:
+    config['allow_cors'] = [u.strip() for u in frontend_url.split(',') if u.strip()]
+else:
+    config['allow_cors'] = frontend_url.strip()
+with open(path, 'w') as f:
+    json.dump(config, f, indent=4)
+"
     bench --site lms.render clear-cache
 fi
 
