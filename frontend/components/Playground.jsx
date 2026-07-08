@@ -12,6 +12,7 @@ import 'xterm/css/xterm.css';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { T, BUG_ANALYSIS_SYSTEM, BUG_TIPS_SYSTEM, BUG_FIX_METHODS_SYSTEM, FIX_EXPLANATION_SYSTEM, SOCRATIC_HELP_SYSTEM } from '@/lib/lms-data';
+import CodeVisualizer3D from './CodeVisualizer3D';
 
 export default function Playground({
   initialCode = '# Write your Python code here\nprint("Hello World!")\n',
@@ -76,6 +77,7 @@ export default function Playground({
   const [isTracing, setIsTracing] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1500); // 1500ms (1x), 1000ms (1.5x), 500ms (2x)
   const [selectedTutorAction, setSelectedTutorAction] = useState('default');
+  const [visualizerMode, setVisualizerMode] = useState('3D'); // '3D' | '2D'
 
   const terminalElRef = useRef(null);
   const terminalInstanceRef = useRef(null);
@@ -739,6 +741,195 @@ except Exception as e:
     );
   };
 
+  const getTraceStepDetails = () => {
+    if (!traceData || !traceData[currentStep]) return null;
+    const { variables = {}, error, line, stdout = "" } = traceData[currentStep];
+    const keys = Object.keys(variables);
+    const prevStep = currentStep > 0 ? traceData[currentStep - 1] : null;
+    const prevVariables = prevStep ? prevStep.variables : {};
+
+    const listKey = keys.find(k => Array.isArray(variables[k]) && !k.startsWith('__'));
+    const listVal = listKey ? variables[listKey] : [];
+    
+    // Find pointer variables pointing to indices in this list
+    const pointers = {};
+    if (listKey) {
+      Object.entries(variables).forEach(([k, v]) => {
+        if (typeof v === 'number' && v >= 0 && v < listVal.length && !k.startsWith('__') && k !== 'step_counter') {
+          if (!pointers[v]) pointers[v] = [];
+          pointers[v].push(k);
+        }
+      });
+    }
+
+    const prevListVal = prevVariables[listKey];
+    let actionType = "STEP";
+    let swapMessage = "";
+    
+    const changedIndices = [];
+    if (listKey && prevListVal && JSON.stringify(prevListVal) !== JSON.stringify(listVal)) {
+      listVal.forEach((item, idx) => {
+        if (prevListVal[idx] !== item) {
+          changedIndices.push(idx);
+        }
+      });
+      if (changedIndices.length === 2) {
+        actionType = "SWAP";
+        swapMessage = `Switch ${listVal[changedIndices[0]]} ↔ ${listVal[changedIndices[1]]}`;
+      } else if (changedIndices.length > 0) {
+        actionType = "ASSIGN";
+        swapMessage = `Update [${changedIndices.join(', ')}]`;
+      }
+    } else if (listKey) {
+      const activePointers = Object.entries(pointers).flatMap(([idx, names]) => names);
+      if (activePointers.length >= 2) {
+        actionType = "COMPARE";
+        swapMessage = `Compare ${activePointers.join(' ↔ ')}`;
+      }
+    }
+
+    const scalarKeys = keys.filter(k => {
+      const val = variables[k];
+      return !Array.isArray(val) && (typeof val !== 'object' || val === null);
+    });
+
+    const dictKeys = keys.filter(k => {
+      const val = variables[k];
+      return typeof val === 'object' && val !== null && !Array.isArray(val);
+    });
+
+    // Active line info
+    const lines = code.split('\n');
+    const activeLineText = lines[line - 1]?.trim() || '';
+    
+    let lineActionType = "EXECUTE";
+    if (activeLineText.startsWith('for ') || activeLineText.startsWith('while ')) {
+      lineActionType = "LOOP EVALUATION";
+    } else if (activeLineText.startsWith('if ') || activeLineText.startsWith('elif ') || activeLineText.startsWith('else:')) {
+      lineActionType = "BRANCH DECISION";
+    } else if (activeLineText.includes('print(')) {
+      lineActionType = "PRINT OUTPUT";
+    } else if (activeLineText.includes('=')) {
+      lineActionType = "VARIABLE ASSIGN";
+    } else if (activeLineText.startsWith('def ')) {
+      lineActionType = "FUNCTION DECLARE";
+    } else if (activeLineText.startsWith('return ')) {
+      lineActionType = "FUNCTION RETURN";
+    }
+
+    return {
+      variables,
+      error,
+      line,
+      stdout,
+      listKey,
+      listVal,
+      scalarKeys,
+      dictKeys,
+      actionType,
+      swapMessage,
+      activeLineText,
+      lineActionType
+    };
+  };
+
+  const render3DVisualizer = () => {
+    const details = getTraceStepDetails();
+    if (!details) return null;
+
+    const {
+      variables,
+      error,
+      line,
+      stdout,
+      listKey,
+      listVal,
+      scalarKeys,
+      dictKeys,
+      actionType,
+      swapMessage,
+      activeLineText,
+      lineActionType
+    } = details;
+
+    if (error) {
+      return (
+        <div style={{ color: '#F55B6B', background: 'rgba(245,91,107,0.08)', border: '1px solid rgba(245,91,107,0.3)', padding: 12, borderRadius: 8, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6, margin: 14 }}>
+          <strong style={{ display: 'block' }}>⚠️ Python Runtime Error</strong>
+          <span style={{ fontFamily: 'monospace' }}>{error}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#ffffff', position: 'relative' }}>
+        
+        {/* Floating Code Line HUD */}
+        {activeLineText && (
+          <div style={{
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            zIndex: 30,
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(15, 23, 42, 0.08)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            maxWidth: '55%',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 9, color: '#64748b', fontWeight: 800 }}>LINE {line}</span>
+              <span style={{ fontSize: 8.5, color: '#4f46e5', background: 'rgba(79, 70, 229, 0.08)', padding: '1px 5px', borderRadius: 4, fontWeight: 800 }}>{lineActionType}</span>
+            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 11.5, color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+              {activeLineText}
+            </div>
+            {swapMessage && (
+              <div style={{ fontSize: 10, color: '#D97706', fontWeight: 700, fontFamily: 'monospace', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span>⚡</span> {swapMessage}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3D WebGL Scene */}
+        <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+          <CodeVisualizer3D
+            listKey={listKey}
+            listVal={listVal}
+            variables={variables}
+            prevVariables={currentStep > 0 ? traceData[currentStep - 1].variables : {}}
+            scalarKeys={scalarKeys}
+            dictKeys={dictKeys}
+            actionType={actionType}
+            swapMessage={swapMessage}
+          />
+        </div>
+
+        {/* Console Stdout Output Panel at Bottom */}
+        {stdout && (
+          <div style={{
+            padding: '10px 14px',
+            background: '#f8fafc',
+            borderTop: '1px solid #e2e8f0',
+            maxHeight: 100,
+            overflowY: 'auto',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            color: '#0f172a',
+            flexShrink: 0
+          }} className="sandbox-scroll">
+            <div style={{ fontSize: 9, color: '#64748b', fontWeight: 800, marginBottom: 4, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Console Output</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{stdout}</div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
   // Variable visualizer renderer
   const renderVariables = () => {
     if (!traceData || !traceData[currentStep]) return null;
@@ -1271,6 +1462,51 @@ except Exception as e:
                     >
                       {playSpeed === 1500 ? '1.0x' : playSpeed === 1000 ? '1.5x' : '2.0x'}
                     </button>
+
+                    {/* 3D/2D Visualizer Mode Toggle */}
+                    <div style={{
+                      display: 'flex',
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 4,
+                      padding: 2,
+                      gap: 2,
+                      alignItems: 'center'
+                    }}>
+                      <button
+                        onClick={() => setVisualizerMode('3D')}
+                        style={{
+                          background: visualizerMode === '3D' ? '#F5A95B' : 'transparent',
+                          color: visualizerMode === '3D' ? '#000000' : '#8892B0',
+                          border: 'none',
+                          padding: '3px 8px',
+                          borderRadius: 3,
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        3D
+                      </button>
+                      <button
+                        onClick={() => setVisualizerMode('2D')}
+                        style={{
+                          background: visualizerMode === '2D' ? '#F5A95B' : 'transparent',
+                          color: visualizerMode === '2D' ? '#000000' : '#8892B0',
+                          border: 'none',
+                          padding: '3px 8px',
+                          borderRadius: 3,
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        2D
+                      </button>
+                    </div>
+
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button
                         disabled={currentStep === 0}
@@ -1347,7 +1583,13 @@ except Exception as e:
             )}
 
             {/* Variable memory values scrolling track */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 14 }} className="sandbox-scroll">
+            <div style={{
+              flex: 1,
+              overflowY: traceData && visualizerMode === '3D' ? 'hidden' : 'auto',
+              padding: traceData && visualizerMode === '3D' ? 0 : 14,
+              background: traceData && visualizerMode === '3D' ? '#ffffff' : 'transparent',
+              transition: 'background 0.3s'
+            }} className="sandbox-scroll">
               {traceError && (
                 <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', gap: 12 }}>
                   <div style={{ fontSize: 32 }}>⚠️</div>
@@ -1369,7 +1611,13 @@ except Exception as e:
                   </span>
                 </div>
               )}
-              {traceData && renderVariables()}
+              {traceData && (
+                visualizerMode === '3D' ? (
+                  render3DVisualizer()
+                ) : (
+                  renderVariables()
+                )
+              )}
             </div>
           </div>
 
