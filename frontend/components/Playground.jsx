@@ -862,32 +862,72 @@ except Exception as e:
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#ffffff', position: 'relative' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#090d16', position: 'relative' }}>
         
         {/* Floating Code Line HUD */}
         {activeLineText && (
           <div style={{
             position: 'absolute',
-            top: 10,
-            left: 10,
+            top: 12,
+            left: 12,
             zIndex: 30,
-            background: 'rgba(255, 255, 255, 0.92)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            borderRadius: 10,
-            padding: '8px 12px',
-            maxWidth: '55%',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)'
+            background: 'rgba(10, 15, 30, 0.85)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 12,
+            padding: '10px 14px',
+            maxWidth: '60%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 9, color: '#64748b', fontWeight: 800 }}>LINE {line}</span>
-              <span style={{ fontSize: 8.5, color: '#4f46e5', background: 'rgba(79, 70, 229, 0.08)', padding: '1px 5px', borderRadius: 4, fontWeight: 800 }}>{lineActionType}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 9.5, color: '#8892B0', fontWeight: 800, letterSpacing: '0.05em' }}>LINE {line}</span>
+              <span style={{
+                fontSize: 9,
+                color: lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
+                       lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
+                       lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
+                       lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#F8FAFC',
+                background: lineActionType === 'VARIABLE ASSIGN' ? 'rgba(251, 191, 36, 0.15)' :
+                            lineActionType === 'LOOP EVALUATION' ? 'rgba(56, 189, 248, 0.15)' :
+                            lineActionType === 'BRANCH DECISION' ? 'rgba(167, 139, 250, 0.15)' :
+                            lineActionType === 'PRINT OUTPUT' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+                padding: '2px 6px',
+                borderRadius: 5,
+                fontWeight: 800,
+                letterSpacing: '0.04em'
+              }}>
+                {lineActionType}
+              </span>
             </div>
-            <div style={{ fontFamily: 'monospace', fontSize: 11.5, color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            <div style={{
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: '#F8FAFC',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              padding: '6px 10px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              borderRadius: 6,
+              borderLeft: `3px solid ${
+                lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
+                lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
+                lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
+                lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#6366F1'
+              }`
+            }}>
               {activeLineText}
             </div>
             {swapMessage && (
-              <div style={{ fontSize: 10, color: '#D97706', fontWeight: 700, fontFamily: 'monospace', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+              <div style={{
+                fontSize: 10.5,
+                color: actionType === 'SWAP' ? '#F87171' : '#34D399',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                marginTop: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}>
                 <span>⚡</span> {swapMessage}
               </div>
             )}
@@ -1587,7 +1627,7 @@ except Exception as e:
               flex: 1,
               overflowY: traceData && visualizerMode === '3D' ? 'hidden' : 'auto',
               padding: traceData && visualizerMode === '3D' ? 0 : 14,
-              background: traceData && visualizerMode === '3D' ? '#ffffff' : 'transparent',
+              background: traceData && visualizerMode === '3D' ? '#090d16' : 'transparent',
               transition: 'background 0.3s'
             }} className="sandbox-scroll">
               {traceError && (

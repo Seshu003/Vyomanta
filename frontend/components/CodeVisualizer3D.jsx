@@ -134,7 +134,7 @@ export default function CodeVisualizer3D({
 
     // Setup Scene, Camera, Renderer
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#ffffff'); // White background
+    scene.background = new THREE.Color('#090d16'); // Deep dark cyber background
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
@@ -153,14 +153,9 @@ export default function CodeVisualizer3D({
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
 
-    // OrbitControls for Student Interaction
+    // OrbitControls for Student Interaction (interactivity disabled)
     const controls = new OrbitControls(camera, canvas);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    // Set boundaries to prevent getting lost in space
-    controls.minDistance = 3;
-    controls.maxDistance = 18;
-    controls.maxPolarAngle = Math.PI / 2 - 0.05; // don't go below ground level
+    controls.enabled = false; // Disable all user pan/zoom/rotate
     controlsRef.current = controls;
 
     // Add Lights
@@ -180,8 +175,8 @@ export default function CodeVisualizer3D({
     scene.add(pointLight);
 
     // Subtle Grid Helper
-    const gridHelper = new THREE.GridHelper(30, 30, 0xe2e8f0, 0xf1f5f9);
-    gridHelper.position.y = -0.505;
+    const gridHelper = new THREE.GridHelper(30, 30, 0x1e293b, 0x0f172a);
+    gridHelper.position.y = 0.0; // Sit at base y=0
     scene.add(gridHelper);
 
     // Visualizer meshes container group
@@ -244,8 +239,6 @@ export default function CodeVisualizer3D({
     const tempV = new THREE.Vector3();
 
     const tick = () => {
-      controls.update();
-
       // Raycast Hover check
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(visualizerGroup.children);
@@ -254,7 +247,7 @@ export default function CodeVisualizer3D({
         canvas.style.cursor = 'pointer';
       } else {
         hoveredMeshIdRef.current = null;
-        canvas.style.cursor = 'grab';
+        canvas.style.cursor = 'default';
       }
 
       // Smoothly interpolate (lerp) meshes
@@ -268,18 +261,23 @@ export default function CodeVisualizer3D({
         const isHovered = hoveredMeshIdRef.current === id;
         const hoverScaleFactor = isHovered ? 1.15 : 1.0;
 
-        // Position interpolation
+        // Position interpolation (x and z)
         mesh.position.x += (meshInfo.targetX - mesh.position.x) * 0.12;
         mesh.position.z += (meshInfo.targetZ - mesh.position.z) * 0.12;
 
-        // Height scale interpolation
-        meshInfo.currentHeight += (meshInfo.targetHeight - meshInfo.currentHeight) * 0.12;
-        mesh.scale.y = meshInfo.currentHeight;
-        mesh.scale.x = 1.0 * hoverScaleFactor;
-        mesh.scale.z = 1.0 * hoverScaleFactor;
+        // Height scale is constant 1.0, scaled only by hoverScaleFactor
+        mesh.scale.set(hoverScaleFactor, hoverScaleFactor, hoverScaleFactor);
 
-        // Keep anchored to grid floor
-        mesh.position.y = (meshInfo.currentHeight / 2) - 0.5;
+        // Smoothly interpolate Y position (resting vs floating)
+        let baseTargetY = meshInfo.targetY ?? 0.35;
+        
+        // Add a gentle floating bob animation if pointed (floating) or changed (hovering)
+        if (meshInfo.isPointed || meshInfo.wasChanged) {
+          const time = Date.now() * 0.004;
+          const bob = Math.sin(time + (mesh.userData.index || 0)) * 0.08;
+          baseTargetY += bob;
+        }
+        mesh.position.y += (baseTargetY - mesh.position.y) * 0.12;
 
         // Material color & glow interpolation
         mesh.material.color.lerp(meshInfo.targetMat.color, 0.12);
@@ -290,11 +288,19 @@ export default function CodeVisualizer3D({
           mesh.material.emissive.setHex(0x000000);
         }
 
+        // Outline cage opacity & color interpolation
+        const outline = mesh.userData.outline;
+        if (outline) {
+          outline.material.opacity += ((meshInfo.targetOutlineOpacity ?? 0) - outline.material.opacity) * 0.12;
+          const targetCol = new THREE.Color(meshInfo.targetOutlineColor ?? 0xffffff);
+          outline.material.color.lerp(targetCol, 0.12);
+        }
+
         // Project coordinate styles directly onto HTML overlays for absolute positioning
         const overlayElement = document.getElementById(`label-${id}`);
         if (overlayElement) {
-          // Top position of bar
-          tempV.set(mesh.position.x, mesh.position.y + (meshInfo.currentHeight / 2) + 0.1, mesh.position.z);
+          // Top position of cube (height is 0.7, so top is mesh.position.y + 0.35 + 0.1 margin)
+          tempV.set(mesh.position.x, mesh.position.y + 0.45, mesh.position.z);
           tempV.project(camera);
 
           const w = container.clientWidth || 600;
@@ -334,19 +340,13 @@ export default function CodeVisualizer3D({
     const connectorGroup = connectorGroupRef.current;
     if (!scene || !visualizerGroup || !connectorGroup) return;
 
-    // Materials definitions
-    const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x4f46e5, roughness: 0.25, metalness: 0.1 });
-    const compareMaterial = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.15, metalness: 0.1, emissive: 0x10b981, emissiveIntensity: 0.15 });
-    const swapMaterial = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.15, metalness: 0.1, emissive: 0xef4444, emissiveIntensity: 0.15 });
-    const changedMaterial = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.1, emissive: 0xf59e0b, emissiveIntensity: 0.1 });
+    // Premium Glossy Materials
+    const baseMaterial = new THREE.MeshPhysicalMaterial({ color: 0x6366f1, roughness: 0.15, metalness: 0.4, clearcoat: 1.0, clearcoatRoughness: 0.1 });
+    const compareMaterial = new THREE.MeshPhysicalMaterial({ color: 0x10b981, roughness: 0.1, metalness: 0.4, clearcoat: 1.0, clearcoatRoughness: 0.1, emissive: 0x10b981, emissiveIntensity: 0.2 });
+    const swapMaterial = new THREE.MeshPhysicalMaterial({ color: 0xef4444, roughness: 0.1, metalness: 0.4, clearcoat: 1.0, clearcoatRoughness: 0.1, emissive: 0xef4444, emissiveIntensity: 0.25 });
+    const changedMaterial = new THREE.MeshPhysicalMaterial({ color: 0xf59e0b, roughness: 0.15, metalness: 0.4, clearcoat: 1.0, clearcoatRoughness: 0.1, emissive: 0xf59e0b, emissiveIntensity: 0.2 });
 
     const ids = elementIdsRef.current;
-    
-    // Normalize bar heights
-    const numericVals = listVal.map(v => typeof v === 'number' ? v : 1).filter(v => !isNaN(v));
-    const maxVal = numericVals.length > 0 ? Math.max(...numericVals, 1) : 1;
-    const minVal = numericVals.length > 0 ? Math.min(...numericVals, 0) : 0;
-    
     const spacing = 1.0;
     const startX = -((listVal.length - 1) * spacing) / 2;
 
@@ -360,23 +360,36 @@ export default function CodeVisualizer3D({
     });
     pointersRef.current = pointers;
 
+    // Auto-frame camera based on array length and aspect ratio
+    if (cameraRef.current && containerRef.current) {
+      const w = containerRef.current.clientWidth || 600;
+      const h = containerRef.current.clientHeight || 280;
+      const A = w / h;
+      const arrayWidth = (listVal.length - 1) * spacing + 1.0;
+      const fovRad = (cameraRef.current.fov * Math.PI) / 180;
+      const halfFovHeight = Math.tan(fovRad / 2);
+      
+      const requiredDistByWidth = (arrayWidth / 2) / (A * halfFovHeight);
+      const requiredDistByHeight = 2.0 / halfFovHeight;
+      const targetDist = Math.max(6.5, requiredDistByWidth + 2.0, requiredDistByHeight);
+      
+      // Fixed cinematic angle: looking slightly down at the array
+      cameraRef.current.position.set(0, targetDist * 0.52, targetDist * 0.85);
+      cameraRef.current.lookAt(0, 0.1, 0);
+      if (controlsRef.current) {
+        controlsRef.current.target.set(0, 0.1, 0);
+      }
+    }
+
     const activeMeshIds = new Set(ids);
 
     // Sync meshes
     ids.forEach((id, index) => {
       const val = listVal[index];
-      let targetHeight = 1.5;
-      if (typeof val === 'number') {
-        const range = maxVal - minVal || 1;
-        const pct = (val - minVal) / range;
-        targetHeight = 0.4 + pct * 2.2; // height between 0.4 and 2.6
-      }
-
       const targetX = startX + index * spacing;
-      const targetY = targetHeight / 2 - 0.5;
       const targetZ = 0;
 
-      // Determine material
+      // Determine highlights
       const activePointers = pointers[index] || [];
       const isPointed = activePointers.length > 0;
       const prevVal = prevVariables[listKey]?.[index];
@@ -389,35 +402,64 @@ export default function CodeVisualizer3D({
         targetMat = changedMaterial;
       }
 
+      // Height of cubes is constant 0.7
+      let targetY = 0.35; // Default sitting on grid
+      if (isPointed) {
+        targetY = 0.95; // Float high (0.6 units up)
+      } else if (wasChanged) {
+        targetY = 0.65; // Float slightly (0.3 units up)
+      }
+
       let meshInfo = meshesRef.current[id];
       if (!meshInfo) {
-        // Create box mesh
-        const geo = new THREE.BoxGeometry(0.65, 1, 0.65);
+        // Create cube box mesh
+        const geo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
         const mesh = new THREE.Mesh(geo, baseMaterial.clone());
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.position.set(targetX, -10, targetZ); // slide up from bottom
+        mesh.position.set(targetX, -5, targetZ); // slide up from bottom
         mesh.userData = { id, index, value: val };
+
+        // Create glowing wireframe child helper
+        const outlineGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+        const outlineMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false
+        });
+        const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
+        outlineMesh.scale.set(1.15, 1.15, 1.15);
+        mesh.add(outlineMesh);
+        mesh.userData.outline = outlineMesh;
+
         visualizerGroup.add(mesh);
 
         meshInfo = {
           mesh,
-          currentHeight: 0.1,
-          targetHeight,
           targetX,
           targetY,
           targetZ,
           targetMat,
-          value: val
+          value: val,
+          isPointed,
+          wasChanged,
+          targetOutlineOpacity: (isPointed || wasChanged) ? 0.85 : 0.0,
+          targetOutlineColor: isPointed ? (actionType === 'SWAP' ? 0xef4444 : 0x10b981) : 0xf59e0b
         };
         meshesRef.current[id] = meshInfo;
       } else {
         // Update values
         meshInfo.targetX = targetX;
-        meshInfo.targetHeight = targetHeight;
         meshInfo.targetY = targetY;
         meshInfo.targetMat = targetMat;
         meshInfo.value = val;
+        meshInfo.isPointed = isPointed;
+        meshInfo.wasChanged = wasChanged;
+        meshInfo.targetOutlineOpacity = (isPointed || wasChanged) ? 0.85 : 0.0;
+        meshInfo.targetOutlineColor = isPointed ? (actionType === 'SWAP' ? 0xef4444 : 0x10b981) : 0xf59e0b;
+        
         // Keep mesh userData updated
         meshInfo.mesh.userData.index = index;
         meshInfo.mesh.userData.value = val;
@@ -458,8 +500,9 @@ export default function CodeVisualizer3D({
       if (m1 && m2) {
         const x1 = startX + idx1 * spacing;
         const x2 = startX + idx2 * spacing;
-        const y1 = m1.targetHeight - 0.5;
-        const y2 = m2.targetHeight - 0.5;
+        // Y starts at top of cube (center targetY + 0.35 half-height)
+        const y1 = m1.targetY + 0.35;
+        const y2 = m2.targetY + 0.35;
 
         const start = new THREE.Vector3(x1, y1 + 0.1, 0);
         const end = new THREE.Vector3(x2, y2 + 0.1, 0);
@@ -502,7 +545,7 @@ export default function CodeVisualizer3D({
         width: '100%',
         height: '100%',
         minHeight: 250,
-        background: '#ffffff',
+        background: '#090d16',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column'
@@ -581,44 +624,46 @@ export default function CodeVisualizer3D({
             position: 'absolute',
             bottom: 12,
             left: 12,
-            background: 'rgba(15, 23, 42, 0.95)',
-            backdropFilter: 'blur(8px)',
+            background: 'rgba(10, 15, 30, 0.85)',
+            backdropFilter: 'blur(16px)',
             color: '#F8FAFC',
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.08)',
+            padding: '12px 16px',
+            borderRadius: 12,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             fontSize: 11.5,
             fontFamily: 'monospace',
             zIndex: 40,
-            minWidth: 190,
-            boxShadow: '0 10px 20px rgba(0,0,0,0.3)',
+            minWidth: 200,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 4
+            gap: 5
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 4, marginBottom: 4 }}>
-            <span style={{ fontWeight: 800, color: '#F5A95B', letterSpacing: '0.02em' }}>3D ELEMENT INSPECTOR</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: 6, marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, color: '#38BDF8', letterSpacing: '0.04em' }}>ELEMENT DETAILS</span>
             <button
               onClick={() => setSelectedElement(null)}
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#647298',
+                color: '#8892B0',
                 cursor: 'pointer',
                 fontWeight: 800,
-                fontSize: 11,
+                fontSize: 12,
                 padding: '0 2px'
               }}
-              onMouseEnter={e => e.target.style.color = '#ef4444'}
-              onMouseLeave={e => e.target.style.color = '#647298'}
+              onMouseEnter={e => e.target.style.color = '#F87171'}
+              onMouseLeave={e => e.target.style.color = '#8892B0'}
             >
               ✕
             </button>
           </div>
-          <div>Target: <span style={{ color: '#F5A95B', fontWeight: 800 }}>{listKey}[{selectedElement.index}]</span></div>
-          <div>Value: <span style={{ color: '#22C5A0', fontWeight: 800 }}>{String(selectedElement.value)}</span></div>
-          <div>Status: <span style={{ color: '#8892B0' }}>{selectedElement.isPointed ? `Pointed (${selectedElement.pointers.join(', ')})` : 'Idle'}</span></div>
+          <div>Index: <span style={{ color: '#FBBF24', fontWeight: 800 }}>{selectedElement.index}</span></div>
+          <div>Value: <span style={{ color: '#34D399', fontWeight: 800 }}>{String(selectedElement.value)}</span></div>
+          <div>State: <span style={{ color: selectedElement.isPointed ? '#F87171' : '#8892B0' }}>
+            {selectedElement.isPointed ? `Targeted by pointer (${selectedElement.pointers.join(', ')})` : 'Idle'}
+          </span></div>
         </div>
       )}
 
@@ -627,28 +672,39 @@ export default function CodeVisualizer3D({
         <div
           style={{
             position: 'absolute',
-            top: 10,
-            right: 10,
-            width: 160,
-            maxHeight: 'calc(100% - 20px)',
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            borderRadius: 10,
-            padding: 10,
+            top: 12,
+            right: 12,
+            width: 170,
+            maxHeight: 'calc(100% - 24px)',
+            background: 'rgba(10, 15, 30, 0.85)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 12,
+            padding: 12,
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05)',
+            gap: 8,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
             overflowY: 'auto',
             zIndex: 20
           }}
           className="sandbox-scroll"
         >
-          <div style={{ fontSize: 9, color: '#64748B', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: 4 }}>
-            Stack Memory
+          <div style={{
+            fontSize: 9.5,
+            color: '#8892B0',
+            fontWeight: 800,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            paddingBottom: 6,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
+          }}>
+            <span style={{ color: '#6366F1' }}>●</span> Registers
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {stackVars.map((v) => (
               <div
                 key={v.key}
@@ -656,22 +712,22 @@ export default function CodeVisualizer3D({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  background: v.isChanged ? 'rgba(245, 158, 11, 0.08)' : 'rgba(15, 23, 42, 0.02)',
-                  border: v.isChanged ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(15, 23, 42, 0.03)',
-                  borderRadius: 5,
-                  padding: '3px 6px',
+                  background: v.isChanged ? 'rgba(251, 191, 36, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                  border: v.isChanged ? '1px solid rgba(251, 191, 36, 0.4)' : '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: 6,
+                  padding: '4px 8px',
                   transition: 'all 0.3s'
                 }}
               >
-                <span style={{ fontSize: 10.5, fontFamily: 'monospace', fontWeight: 700, color: '#334155' }}>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#8892B0' }}>
                   {v.key}
                 </span>
                 <span
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontFamily: 'monospace',
                     fontWeight: 800,
-                    color: v.isChanged ? '#D97706' : (v.type === 'number' ? '#2563EB' : (v.type === 'boolean' ? '#059669' : '#475569'))
+                    color: v.isChanged ? '#FBBF24' : (v.type === 'number' ? '#38BDF8' : (v.type === 'boolean' ? '#34D399' : '#F8FAFC'))
                   }}
                 >
                   {v.type === 'dict' ? '{...}' : String(v.val)}
