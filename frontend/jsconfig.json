@@ -3,5 +3,11 @@
     "paths": {
       "@/*": ["./*"]
     }
+  },
+  "exclude": [
+    "node_modules"
+  ],
+  "typeAcquisition": {
+    "enable": false
   }
 }

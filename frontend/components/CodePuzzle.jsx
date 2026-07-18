@@ -8,7 +8,7 @@ import { usePyodide } from '@/hooks/usePyodide';
 import {
   Play, Pause, Square, Trash2, CheckCircle, Loader2, Sparkles,
   ChevronLeft, ChevronRight, BookOpen, AlertCircle, X, Award, Zap,
-  Gamepad2, HelpCircle, ChevronDown, Check, Info, Code, Globe, HelpCircle as HelpIcon
+  Gamepad2, HelpCircle, ChevronDown, Check, Info, Code, Globe, HelpCircle as HelpIcon, Sun, Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Terminal } from 'xterm';
@@ -263,6 +263,7 @@ const STARTER_HTML = `<!DOCTYPE html>
 export default function CodePuzzle() {
   // Category Selector: 'programming' | 'html'
   const [category, setCategory] = useState('programming');
+  const [editorTheme, setEditorTheme] = useState('dark');
   const [selectedLanguage, setSelectedLanguage] = useState('python');
   
   // HTML Editor & Preview states
@@ -1315,14 +1316,26 @@ export default function CodePuzzle() {
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div style={{ padding: '8px 16px', background: '#080A0E', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                 <span style={{ fontSize: 10, color: '#647298', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>HTML Code Editor</span>
-                <span style={{ fontSize: 10.5, color: '#3b82f6', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Globe size={11} /> Live Preview Active
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={() => setEditorTheme(editorTheme === 'dark' ? 'light' : 'dark')}
+                    style={{
+                      background: 'transparent', border: 'none', color: '#647298', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, borderRadius: 4
+                    }}
+                    title={`Switch to ${editorTheme === 'dark' ? 'light' : 'dark'} theme`}
+                  >
+                    {editorTheme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                  </button>
+                  <span style={{ fontSize: 10.5, color: '#3b82f6', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Globe size={11} /> Live Preview Active
+                  </span>
+                </div>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', background: '#07080F' }}>
+              <div style={{ flex: 1, overflowY: 'auto', background: editorTheme === 'dark' ? '#07080F' : '#FFFFFF' }}>
                 <CodeMirror
                   value={htmlCode}
-                  theme="dark"
+                  theme={editorTheme}
                   extensions={[html()]}
                   onChange={(value) => handleCodeChange(value)}
                   style={{ fontSize: 13, fontFamily: 'monospace' }}
@@ -1336,7 +1349,17 @@ export default function CodePuzzle() {
               <div style={{ height: `${leftSplitPercent}%`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '8px 16px', background: '#080A0E', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                   <span style={{ fontSize: 10, color: '#647298', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Source Code Editor</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                      onClick={() => setEditorTheme(editorTheme === 'dark' ? 'light' : 'dark')}
+                      style={{
+                        background: 'transparent', border: 'none', color: '#647298', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, borderRadius: 4
+                      }}
+                      title={`Switch to ${editorTheme === 'dark' ? 'light' : 'dark'} theme`}
+                    >
+                      {editorTheme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                    </button>
                     {!isReady && (
                       <span style={{ fontSize: 10.5, color: '#F5A95B', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
@@ -1352,10 +1375,10 @@ export default function CodePuzzle() {
                 </div>
 
                 {/* CodeMirror */}
-                <div style={{ flex: 1, overflowY: 'auto', background: '#07080F' }}>
+                <div style={{ flex: 1, overflowY: 'auto', background: editorTheme === 'dark' ? '#07080F' : '#FFFFFF' }}>
                   <CodeMirror
                     value={code}
-                    theme="dark"
+                    theme={editorTheme}
                     extensions={[python(), errorDecorationField]}
                     onChange={(value) => handleCodeChange(value)}
                     onCreateEditor={(view) => {
