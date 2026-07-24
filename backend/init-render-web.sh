@@ -128,6 +128,8 @@ if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/
       --db-host "$DB_HOST" \
       --db-port "$DB_PORT" \
       --admin-password "${ADMIN_PASSWORD:-admin}" \
+      --install-app payments \
+      --install-app lms \
       --no-setup-db \
       --force
     
@@ -146,11 +148,6 @@ else:
 with open(path, 'w') as f:
     json.dump(config, f, indent=4)
 "
-
-    # Install payments and LMS apps
-    echo "Installing payments & lms applications..."
-    bench --site lms.render install-app payments
-    bench --site lms.render install-app lms
 else
     echo "Database is already seeded. Connecting to existing database tables..."
     python3 -c "
