@@ -199,17 +199,11 @@ echo "Bootstrapping student users..."
 bench --site lms.render execute "exec(open('/home/frappe/create_students.py').read())" || true
 bench --site lms.render execute "exec(open('/home/frappe/grant_question_perm.py').read())" || true
 
-# Shutdown the dummy server to free port 8000
-echo "Stopping dummy server..."
-kill -9 $DUMMY_PID || true
-# Fallback to make sure port 8000 is free
-kill -9 $(lsof -t -i:8000) 2>/dev/null || true
-sleep 2
-
-# Install queue worker dependencies in the bench virtualenv
-echo "Installing queue worker dependencies..."
-./env/bin/pip install pypdf boto3 pymysql python-Levenshtein
-./env/bin/pip cache purge || true
+# Install queue worker dependencies if missing
+if ! ./env/bin/python -c "import boto3, pymysql, pypdf" 2>/dev/null; then
+    echo "Installing queue worker dependencies..."
+    ./env/bin/pip install pypdf boto3 pymysql python-Levenshtein --quiet
+fi
 
 # Start the background queue worker process (supports scaling via env var)
 CONCURRENCY=${QUEUE_WORKER_CONCURRENCY:-2}
@@ -224,6 +218,11 @@ find logs/ sites/*/logs/ -name "*.log" -size +50M 2>/dev/null | while read -r lo
     mv "$logfile" "$logfile.1" 2>/dev/null || true
     truncate -s 0 "$logfile" 2>/dev/null || true
 done
+
+# Shutdown the dummy server to free port 8000
+echo "Stopping dummy server..."
+kill -9 $DUMMY_PID 2>/dev/null || true
+sleep 1
 
 # Update Procfile port mapping to Render's dynamic binding
 sed -i "s/bench serve.*/bench serve --port ${PORT:-8000} --noreload/g" ./Procfile
