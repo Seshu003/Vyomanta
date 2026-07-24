@@ -106,9 +106,31 @@ bench set-redis-cache-host redis://127.0.0.1:6379
 bench set-redis-queue-host redis://127.0.0.1:6379
 bench set-redis-socketio-host redis://127.0.0.1:6379
 
-# Check if the database has tables and is fully initialized (checks for LMS Course table from the lms app)
+# Check if the database has tables and is fully initialized (checks for tabUser table & site_config.json)
 echo "Checking database initialization state..."
-if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" --ssl-ca=/etc/ssl/certs/ca-certificates.crt -e "USE $DB_NAME; SHOW TABLES;" 2>/dev/null | grep -qi "lms course"; then
+if ! python3 -c "
+import pymysql, os, sys
+try:
+    conn = pymysql.connect(
+        host=os.environ.get('DB_HOST'),
+        port=int(os.environ.get('DB_PORT', 4000)),
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASSWORD'),
+        database=os.environ.get('DB_NAME'),
+        ssl={'ca': '/etc/ssl/certs/ca-certificates.crt'}
+    )
+    cursor = conn.cursor()
+    cursor.execute('SHOW TABLES LIKE %s', ('tabUser',))
+    row = cursor.fetchone()
+    conn.close()
+    if row and os.path.exists('sites/lms.render/site_config.json'):
+        sys.exit(0)
+    else:
+        sys.exit(1)
+except Exception as e:
+    print('DB check exception:', e)
+    sys.exit(1)
+"; then
     echo "Database is incomplete or uninitialized. Wiping tables and folder to ensure a clean non-interactive install..."
     
     # Delete pre-existing site folder to prevent overwrite confirmation prompts
