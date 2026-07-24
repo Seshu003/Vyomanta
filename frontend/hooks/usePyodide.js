@@ -5,6 +5,7 @@ export function usePyodide({ onStdout, onStderr, onReady, onFinish, onError, onT
   const [isRunning, setIsRunning] = useState(false);
   const workerRef = useRef(null);
   const stdinBufferRef = useRef(null);
+  const lastRunInputsRef = useRef([]); // inputs typed during the last RUN
 
   // Keep latest callbacks in ref to prevent recreating initWorker on every render
   const callbacksRef = useRef({ onStdout, onStderr, onReady, onFinish, onError, onTraceResult, onStdinRequest });
@@ -71,7 +72,9 @@ export function usePyodide({ onStdout, onStderr, onReady, onFinish, onError, onT
           break;
         case 'FINISH':
           setIsRunning(false);
-          if (cb.onFinish) cb.onFinish();
+          // Store the inputs typed during this run so runTrace can replay them
+          lastRunInputsRef.current = event.data.inputs || [];
+          if (cb.onFinish) cb.onFinish(event.data.inputs || []);
           break;
         case 'ERROR':
           setIsRunning(false);
@@ -101,10 +104,12 @@ export function usePyodide({ onStdout, onStderr, onReady, onFinish, onError, onT
     workerRef.current.postMessage({ type: 'RUN', code });
   }, []);
 
-  const runTrace = useCallback((code) => {
+  const runTrace = useCallback((code, inputs) => {
     if (!isReadyRef.current || isRunningRef.current || !workerRef.current) return;
     setIsRunning(true);
-    workerRef.current.postMessage({ type: 'TRACE', code });
+    // Use provided inputs or fall back to what was typed in last RUN
+    const replayInputs = inputs !== undefined ? inputs : lastRunInputsRef.current;
+    workerRef.current.postMessage({ type: 'TRACE', code, inputs: replayInputs });
   }, []);
 
   const stopCode = useCallback(() => {

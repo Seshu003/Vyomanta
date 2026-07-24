@@ -260,8 +260,9 @@ export default function Playground({
   const onStdinRequest = () => {
     waitingForInputRef.current = true;
     stdinLineRef.current = '';
+    // Note: the prompt text already arrived via STDOUT before this fires.
+    // Switch to cyan so the user's typed chars appear in a distinct color.
     if (terminalInstanceRef.current) {
-      // Switch to cyan color to indicate input mode
       terminalInstanceRef.current.write('\x1b[96m');
     }
   };

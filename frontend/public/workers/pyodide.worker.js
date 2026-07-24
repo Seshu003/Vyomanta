@@ -27,15 +27,20 @@ async function initPyodide() {
 
 /**
  * Blocking stdin reader using SharedArrayBuffer + Atomics.
- * The main thread fills the buffer and sets index[0] = 1 when input is ready.
- * We spin-wait (Atomics.wait) until that happens.
+ * Accepts the prompt string and writes it to terminal BEFORE blocking —
+ * so the prompt ALWAYS appears before the user types anything.
  */
-function readStdinBlocking() {
+function readStdinBlocking(prompt) {
   if (!stdinBuffer) return '';
   const control = new Int32Array(stdinBuffer, 0, 1);
   const data = new Uint8Array(stdinBuffer, 4);
 
-  // Signal to main thread that we need input
+  // Write prompt to terminal first (before STDIN_REQUEST) so order is correct
+  if (prompt) {
+    postMessage({ type: 'STDOUT', content: prompt });
+  }
+
+  // Signal to main thread to enter input mode (cyan cursor)
   postMessage({ type: 'STDIN_REQUEST' });
 
   // Block until main thread sets control[0] = 1
@@ -62,12 +67,10 @@ self.onmessage = async function (event) {
     await initPyodide();
 
   } else if (type === 'INIT_STDIN_BUFFER') {
-    // Main thread sends us a SharedArrayBuffer for blocking stdin
     stdinBuffer = buffer;
 
   } else if (type === 'STDIN_RESPONSE') {
-    // Legacy fallback: main thread sends input text directly (non-blocking path)
-    // This is handled via buffer now; kept for safety
+    // Legacy fallback (non-blocking path)
     if (stdinBuffer) {
       const control = new Int32Array(stdinBuffer, 0, 1);
       const data = new Uint8Array(stdinBuffer, 4);
@@ -85,25 +88,30 @@ self.onmessage = async function (event) {
     }
 
     try {
-      // Override Python's input() to use our blocking stdin reader
+      // Override input() — JS side writes the prompt first, then blocks.
+      // This guarantees the prompt text appears before the user cursor.
       pyodide.globals.set('__js_read_stdin__', readStdinBlocking);
       await pyodide.runPythonAsync(`
 import builtins
+_run_inputs_log = []
+
 def _custom_input(prompt=''):
-    import sys
-    if prompt:
-        sys.stdout.write(prompt)
-        sys.stdout.flush()
-    return __js_read_stdin__()
+    val = __js_read_stdin__(prompt)
+    _run_inputs_log.append(val)
+    return val
+
 builtins.input = _custom_input
 `);
 
       await pyodide.loadPackagesFromImports(code);
       await pyodide.runPythonAsync(code);
-      postMessage({ type: 'FINISH' });
+
+      // Collect what the user typed so trace can replay it
+      const inputsLog = pyodide.globals.get('_run_inputs_log').toJs();
+      postMessage({ type: 'FINISH', inputs: inputsLog });
     } catch (error) {
       postMessage({ type: 'STDERR', content: error.message + '\n' });
-      postMessage({ type: 'FINISH' });
+      postMessage({ type: 'FINISH', inputs: [] });
     }
 
   } else if (type === 'TRACE') {
@@ -117,7 +125,23 @@ builtins.input = _custom_input
 import sys
 import json
 import math
-import io
+import builtins
+
+# ── Mock input() during tracing ──────────────────────────────────────────────
+# Replay the actual values the user typed during the real run, in order.
+# This prevents the tracer from blocking on stdin.
+_trace_inputs = []
+_trace_input_idx = [0]
+
+def _trace_input(prompt=''):
+    idx = _trace_input_idx[0]
+    if idx < len(_trace_inputs):
+        val = _trace_inputs[idx]
+        _trace_input_idx[0] += 1
+        return val
+    return ''
+
+builtins.input = _trace_input
 
 class TraceStdout:
     def __init__(self):
@@ -156,10 +180,14 @@ def serialize_val(val, visited=None):
         finally:
             visited.remove(val_id)
 
-def trace_code(code_string):
+def trace_code(code_string, provided_inputs=None):
+    global _trace_inputs, _trace_input_idx
+    _trace_inputs = list(provided_inputs) if provided_inputs else []
+    _trace_input_idx[0] = 0
+
     trace_data = []
     step_counter = 0
-    
+
     stdout_redirector = TraceStdout()
     old_stdout = sys.stdout
     sys.stdout = stdout_redirector
@@ -171,12 +199,12 @@ def trace_code(code_string):
                 step_counter += 1
                 if step_counter > 500:
                     raise Exception("Trace limit exceeded (max 500 steps) to prevent infinite loops.")
-                
+
                 local_vars = {}
                 for k, v in frame.f_locals.items():
-                    if not k.startswith('__') and k != 'trace_code' and k != 'trace_lines' and k != 'serialize_val':
+                    if not k.startswith('__') and k not in ('trace_code', 'trace_lines', 'serialize_val'):
                         local_vars[k] = serialize_val(v)
-                
+
                 trace_data.append({
                     "step": step_counter,
                     "line": frame.f_lineno,
@@ -188,7 +216,7 @@ def trace_code(code_string):
 
     globals_dict = {"__name__": "__main__"}
     locals_dict = {}
-    
+
     sys.settrace(trace_lines)
     try:
         exec(code_string, globals_dict, locals_dict)
@@ -203,12 +231,17 @@ def trace_code(code_string):
     finally:
         sys.settrace(None)
         sys.stdout = old_stdout
-        
+
     return json.dumps(trace_data)
 `;
       await pyodide.runPythonAsync(traceRunner);
       pyodide.globals.set("user_code_str", code);
-      const jsonResult = await pyodide.runPythonAsync("trace_code(user_code_str)");
+
+      // Replay the actual user inputs so trace variables are correct
+      const inputs = event.data.inputs || [];
+      pyodide.globals.set("user_provided_inputs", pyodide.toPy(inputs));
+
+      const jsonResult = await pyodide.runPythonAsync("trace_code(user_code_str, user_provided_inputs)");
       postMessage({ type: 'TRACE_RESULT', content: JSON.parse(jsonResult) });
     } catch (error) {
       postMessage({ type: 'ERROR', message: error.message });
