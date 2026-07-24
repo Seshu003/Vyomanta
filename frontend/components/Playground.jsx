@@ -12,7 +12,7 @@ import 'xterm/css/xterm.css';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { T, BUG_ANALYSIS_SYSTEM, BUG_TIPS_SYSTEM, BUG_FIX_METHODS_SYSTEM, FIX_EXPLANATION_SYSTEM, SOCRATIC_HELP_SYSTEM } from '@/lib/lms-data';
-import CodeVisualizer3D from './CodeVisualizer3D';
+
 
 export default function Playground({
   initialCode = '# Write your Python code here\nprint("Hello World!")\n',
@@ -77,7 +77,7 @@ export default function Playground({
   const [isTracing, setIsTracing] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1500); // 1500ms (1x), 1000ms (1.5x), 500ms (2x)
   const [selectedTutorAction, setSelectedTutorAction] = useState('default');
-  const [visualizerMode, setVisualizerMode] = useState('3D'); // '3D' | '2D'
+  const [vizZoom, setVizZoom] = useState(1); // zoom level for 2D visualizer
 
   const terminalElRef = useRef(null);
   const terminalInstanceRef = useRef(null);
@@ -884,143 +884,8 @@ except Exception as e:
     };
   };
 
-  const render3DVisualizer = () => {
-    const details = getTraceStepDetails();
-    if (!details) return null;
+  // 3D visualizer removed — 2D only
 
-    const {
-      variables,
-      error,
-      line,
-      stdout,
-      listKey,
-      listVal,
-      scalarKeys,
-      dictKeys,
-      actionType,
-      swapMessage,
-      activeLineText,
-      lineActionType
-    } = details;
-
-    if (error) {
-      return (
-        <div style={{ color: '#F55B6B', background: 'rgba(245,91,107,0.08)', border: '1px solid rgba(245,91,107,0.3)', padding: 12, borderRadius: 8, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6, margin: 14 }}>
-          <strong style={{ display: 'block' }}>⚠️ Python Runtime Error</strong>
-          <span style={{ fontFamily: 'monospace' }}>{error}</span>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#090d16', position: 'relative' }}>
-        
-        {/* Floating Code Line HUD */}
-        {activeLineText && (
-          <div style={{
-            position: 'absolute',
-            top: 12,
-            left: 12,
-            zIndex: 30,
-            background: 'rgba(10, 15, 30, 0.85)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 12,
-            padding: '10px 14px',
-            maxWidth: '60%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 9.5, color: '#8892B0', fontWeight: 800, letterSpacing: '0.05em' }}>LINE {line}</span>
-              <span style={{
-                fontSize: 9,
-                color: lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
-                       lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
-                       lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
-                       lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#F8FAFC',
-                background: lineActionType === 'VARIABLE ASSIGN' ? 'rgba(251, 191, 36, 0.15)' :
-                            lineActionType === 'LOOP EVALUATION' ? 'rgba(56, 189, 248, 0.15)' :
-                            lineActionType === 'BRANCH DECISION' ? 'rgba(167, 139, 250, 0.15)' :
-                            lineActionType === 'PRINT OUTPUT' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                padding: '2px 6px',
-                borderRadius: 5,
-                fontWeight: 800,
-                letterSpacing: '0.04em'
-              }}>
-                {lineActionType}
-              </span>
-            </div>
-            <div style={{
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: '#F8FAFC',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              padding: '6px 10px',
-              background: 'rgba(0, 0, 0, 0.4)',
-              borderRadius: 6,
-              borderLeft: `3px solid ${
-                lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
-                lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
-                lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
-                lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#6366F1'
-              }`
-            }}>
-              {activeLineText}
-            </div>
-            {swapMessage && (
-              <div style={{
-                fontSize: 10.5,
-                color: actionType === 'SWAP' ? '#F87171' : '#34D399',
-                fontWeight: 700,
-                fontFamily: 'monospace',
-                marginTop: 6,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}>
-                <span>⚡</span> {swapMessage}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 3D WebGL Scene */}
-        <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-          <CodeVisualizer3D
-            listKey={listKey}
-            listVal={listVal}
-            variables={variables}
-            prevVariables={currentStep > 0 ? traceData[currentStep - 1].variables : {}}
-            scalarKeys={scalarKeys}
-            dictKeys={dictKeys}
-            actionType={actionType}
-            swapMessage={swapMessage}
-            stdout={stdout}
-          />
-        </div>
-
-        {/* Console Stdout Output Panel at Bottom */}
-        {stdout && (
-          <div style={{
-            padding: '10px 14px',
-            background: '#f8fafc',
-            borderTop: '1px solid #e2e8f0',
-            maxHeight: 100,
-            overflowY: 'auto',
-            fontFamily: 'monospace',
-            fontSize: 12,
-            color: '#0f172a',
-            flexShrink: 0
-          }} className="sandbox-scroll">
-            <div style={{ fontSize: 9, color: '#64748b', fontWeight: 800, marginBottom: 4, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Console Output</div>
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{stdout}</div>
-          </div>
-        )}
-
-      </div>
-    );
-  };
 
   // Variable visualizer renderer
   const renderVariables = () => {
@@ -1555,48 +1420,24 @@ except Exception as e:
                       {playSpeed === 1500 ? '1.0x' : playSpeed === 1000 ? '1.5x' : '2.0x'}
                     </button>
 
-                    {/* 3D/2D Visualizer Mode Toggle */}
-                    <div style={{
-                      display: 'flex',
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 4,
-                      padding: 2,
-                      gap: 2,
-                      alignItems: 'center'
-                    }}>
+                    {/* Zoom controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: 2 }}>
                       <button
-                        onClick={() => setVisualizerMode('3D')}
-                        style={{
-                          background: visualizerMode === '3D' ? '#F5A95B' : 'transparent',
-                          color: visualizerMode === '3D' ? '#000000' : '#8892B0',
-                          border: 'none',
-                          padding: '3px 8px',
-                          borderRadius: 3,
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        3D
-                      </button>
+                        onClick={() => setVizZoom(z => Math.min(z + 0.15, 2.5))}
+                        style={{ background: 'transparent', border: 'none', color: '#8892B0', cursor: 'pointer', padding: '2px 7px', borderRadius: 3, fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                        title="Zoom In"
+                      >+</button>
+                      <span style={{ fontSize: 9.5, color: '#647298', fontFamily: 'monospace', minWidth: 32, textAlign: 'center', userSelect: 'none' }}>{Math.round(vizZoom * 100)}%</span>
                       <button
-                        onClick={() => setVisualizerMode('2D')}
-                        style={{
-                          background: visualizerMode === '2D' ? '#F5A95B' : 'transparent',
-                          color: visualizerMode === '2D' ? '#000000' : '#8892B0',
-                          border: 'none',
-                          padding: '3px 8px',
-                          borderRadius: 3,
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        2D
-                      </button>
+                        onClick={() => setVizZoom(z => Math.max(z - 0.15, 0.4))}
+                        style={{ background: 'transparent', border: 'none', color: '#8892B0', cursor: 'pointer', padding: '2px 7px', borderRadius: 3, fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                        title="Zoom Out"
+                      >−</button>
+                      <button
+                        onClick={() => setVizZoom(1)}
+                        style={{ background: 'transparent', border: 'none', color: '#4A5568', cursor: 'pointer', padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}
+                        title="Reset Zoom"
+                      >↺</button>
                     </div>
 
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -1677,10 +1518,10 @@ except Exception as e:
             {/* Variable memory values scrolling track */}
             <div style={{
               flex: 1,
-              overflowY: traceData && visualizerMode === '3D' ? 'hidden' : 'auto',
-              padding: traceData && visualizerMode === '3D' ? 0 : 14,
-              background: traceData && visualizerMode === '3D' ? '#090d16' : 'transparent',
-              transition: 'background 0.3s'
+              overflowY: 'auto',
+              overflowX: 'auto',
+              background: 'transparent',
+              position: 'relative'
             }} className="sandbox-scroll">
               {traceError && (
                 <div style={{ display: 'flex', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', gap: 12 }}>
@@ -1704,11 +1545,15 @@ except Exception as e:
                 </div>
               )}
               {traceData && (
-                visualizerMode === '3D' ? (
-                  render3DVisualizer()
-                ) : (
-                  renderVariables()
-                )
+                <div style={{
+                  padding: 14,
+                  transformOrigin: 'top left',
+                  transform: `scale(${vizZoom})`,
+                  width: `${100 / vizZoom}%`,
+                  minHeight: '100%'
+                }}>
+                  {renderVariables()}
+                </div>
               )}
             </div>
           </div>
