@@ -85,6 +85,10 @@ export default function Playground({
   const playIntervalRef = useRef(null);
   const editorViewRef = useRef(null);
   const editorPanelRef = useRef(null);
+  // Stdin support refs
+  const stdinLineRef = useRef('');
+  const waitingForInputRef = useRef(false);
+  const sendStdinRef = useRef(null);
   const [mainSplitPercent, setMainSplitPercent] = useState(50); // Left vs Right width percentage
   const [leftSplitPercent, setLeftSplitPercent] = useState(60); // Left Column: Editor height percentage
   const [rightSplitPercent, setRightSplitPercent] = useState(codingExercise?.hasExercise ? 58 : 100); // Right Column: Visualizer height percentage
@@ -225,6 +229,9 @@ export default function Playground({
   };
 
   const onFinish = () => {
+    // Reset stdin state when execution ends
+    waitingForInputRef.current = false;
+    stdinLineRef.current = '';
     if (verifyState === 'verifying' && assertionResults.length === 0) {
       setVerifyState('failed');
       setAssertionResults([{ expr: "Execution check", passed: false, msg: "Script completed but verification assertions failed or didn't run." }]);
@@ -235,6 +242,9 @@ export default function Playground({
   };
 
   const onError = (msg) => {
+    // Reset stdin state on error
+    waitingForInputRef.current = false;
+    stdinLineRef.current = '';
     setIsTracing(false);
     if (verifyState === 'verifying') {
       setVerifyState('failed');
@@ -244,6 +254,16 @@ export default function Playground({
       terminalInstanceRef.current.write(`\x1b[31mError: ${msg}\x1b[0m\n`);
     }
     if (onTraceComplete) onTraceComplete(null);
+  };
+
+  // Called by the worker when Python's input() is waiting for user input
+  const onStdinRequest = () => {
+    waitingForInputRef.current = true;
+    stdinLineRef.current = '';
+    if (terminalInstanceRef.current) {
+      // Switch to cyan color to indicate input mode
+      terminalInstanceRef.current.write('\x1b[96m');
+    }
   };
 
   const validateTraceData = (trace) => {
@@ -279,14 +299,20 @@ export default function Playground({
     if (onTraceComplete) onTraceComplete(trace);
   };
 
-  const { isReady, isRunning, runCode, runTrace, stopCode } = usePyodide({
+  const { isReady, isRunning, runCode, runTrace, stopCode, sendStdin } = usePyodide({
     onStdout,
     onStderr,
     onReady,
     onFinish,
     onError,
-    onTraceResult
+    onTraceResult,
+    onStdinRequest
   });
+
+  // Keep sendStdin stable inside terminal's onKey closure
+  useEffect(() => {
+    sendStdinRef.current = sendStdin;
+  }, [sendStdin]);
 
   // Trigger trace runner once Pyodide is ready and console execution is finished
   useEffect(() => {
@@ -388,6 +414,31 @@ export default function Playground({
         fitAddonRef.current = fitAddon;
         fitAddon.fit();
         term.writeln("\x1b[33mLoading Python Environment (Pyodide WASM)...\x1b[0m");
+
+        // --- Intercept keystrokes for interactive stdin (input() support) ---
+        term.onKey(({ key, domEvent }) => {
+          const kc = domEvent.keyCode;
+          if (!waitingForInputRef.current) return;
+
+          if (kc === 13) {
+            // Enter — submit buffered line
+            const line = stdinLineRef.current;
+            stdinLineRef.current = '';
+            waitingForInputRef.current = false;
+            term.write('\x1b[0m\r\n'); // reset color, newline
+            if (sendStdinRef.current) sendStdinRef.current(line);
+          } else if (kc === 8 || kc === 127) {
+            // Backspace
+            if (stdinLineRef.current.length > 0) {
+              stdinLineRef.current = stdinLineRef.current.slice(0, -1);
+              term.write('\b \b');
+            }
+          } else if (key && key.length === 1) {
+            // Printable character
+            stdinLineRef.current += key;
+            term.write(key);
+          }
+        });
       } catch (e) {
         console.warn("Failed to initialize xterm:", e);
       }
