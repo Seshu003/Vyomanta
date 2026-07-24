@@ -226,8 +226,8 @@ find logs/ sites/*/logs/ -name "*.log" -size +50M 2>/dev/null | while read -r lo
 done
 
 # Update Procfile port mapping to Render's dynamic binding
-sed -i "s/bench serve.*/bench serve --port ${PORT:-8000}/g" ./Procfile
+sed -i "s/bench serve.*/bench serve --port ${PORT:-8000} --noreload/g" ./Procfile
 
 # Start the server (binds instantly to port 8000/dynamic port)
 echo "Starting Frappe Bench web server..."
-bench --site lms.render serve --port ${PORT:-8000}
+bench --site lms.render serve --port ${PORT:-8000} --noreload
