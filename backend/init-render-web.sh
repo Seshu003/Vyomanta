@@ -108,7 +108,7 @@ bench set-redis-socketio-host redis://127.0.0.1:6379
 
 # Check if the database has tables and is fully initialized (checks for tabUser table & site_config.json)
 echo "Checking database initialization state..."
-if ! python3 -c "
+if ! ./env/bin/python -c "
 import pymysql, os, sys
 try:
     conn = pymysql.connect(
