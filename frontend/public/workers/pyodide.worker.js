@@ -3,6 +3,9 @@ importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
 
 let pyodide = null;
 
+// SharedArrayBuffer for stdin: [0]=status (0=waiting,1=ready), rest=UTF-8 bytes up to 1023 chars
+let stdinBuffer = null;
+
 async function initPyodide() {
   if (pyodide) return;
   try {
@@ -15,18 +18,66 @@ async function initPyodide() {
         postMessage({ type: 'STDERR', content: text + '\n' });
       }
     });
-    
+
     postMessage({ type: 'READY' });
   } catch (error) {
     postMessage({ type: 'ERROR', message: 'Failed to load Pyodide: ' + error.message });
   }
 }
 
+/**
+ * Blocking stdin reader using SharedArrayBuffer + Atomics.
+ * The main thread fills the buffer and sets index[0] = 1 when input is ready.
+ * We spin-wait (Atomics.wait) until that happens.
+ */
+function readStdinBlocking() {
+  if (!stdinBuffer) return '';
+  const control = new Int32Array(stdinBuffer, 0, 1);
+  const data = new Uint8Array(stdinBuffer, 4);
+
+  // Signal to main thread that we need input
+  postMessage({ type: 'STDIN_REQUEST' });
+
+  // Block until main thread sets control[0] = 1
+  Atomics.store(control, 0, 0);
+  Atomics.wait(control, 0, 0); // blocks until != 0
+
+  // Read the UTF-8 string from the buffer
+  let end = 0;
+  while (end < data.length && data[end] !== 0) end++;
+  const bytes = data.slice(0, end);
+  const text = new TextDecoder().decode(bytes);
+
+  // Reset buffer for next call
+  data.fill(0);
+  Atomics.store(control, 0, 0);
+
+  return text;
+}
+
 self.onmessage = async function (event) {
-  const { type, code } = event.data;
+  const { type, code, inputText, buffer } = event.data;
 
   if (type === 'INIT') {
     await initPyodide();
+
+  } else if (type === 'INIT_STDIN_BUFFER') {
+    // Main thread sends us a SharedArrayBuffer for blocking stdin
+    stdinBuffer = buffer;
+
+  } else if (type === 'STDIN_RESPONSE') {
+    // Legacy fallback: main thread sends input text directly (non-blocking path)
+    // This is handled via buffer now; kept for safety
+    if (stdinBuffer) {
+      const control = new Int32Array(stdinBuffer, 0, 1);
+      const data = new Uint8Array(stdinBuffer, 4);
+      data.fill(0);
+      const encoded = new TextEncoder().encode(inputText || '');
+      data.set(encoded.slice(0, data.length - 1));
+      Atomics.store(control, 0, 1);
+      Atomics.notify(control, 0, 1);
+    }
+
   } else if (type === 'RUN') {
     if (!pyodide) {
       postMessage({ type: 'ERROR', message: 'Environment is not initialized yet.' });
@@ -34,16 +85,27 @@ self.onmessage = async function (event) {
     }
 
     try {
-      // Auto load any imported packages from CDN
+      // Override Python's input() to use our blocking stdin reader
+      pyodide.globals.set('__js_read_stdin__', readStdinBlocking);
+      await pyodide.runPythonAsync(`
+import builtins
+def _custom_input(prompt=''):
+    import sys
+    if prompt:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+    return __js_read_stdin__()
+builtins.input = _custom_input
+`);
+
       await pyodide.loadPackagesFromImports(code);
-      
-      // Run Python script
       await pyodide.runPythonAsync(code);
       postMessage({ type: 'FINISH' });
     } catch (error) {
       postMessage({ type: 'STDERR', content: error.message + '\n' });
       postMessage({ type: 'FINISH' });
     }
+
   } else if (type === 'TRACE') {
     if (!pyodide) {
       postMessage({ type: 'ERROR', message: 'Environment is not initialized yet.' });
