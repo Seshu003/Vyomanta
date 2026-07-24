@@ -192,7 +192,7 @@ bench use lms.render
 
 # Run database migrations (ensures schemas align with installed codebase)
 echo "Running database migrations..."
-bench --site lms.render migrate
+bench --site lms.render migrate || true
 
 # Bootstrap student users in the database
 echo "Bootstrapping student users..."
