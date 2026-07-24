@@ -11,6 +11,9 @@ except Exception as e:
 
 def grant_permission(doctype, role, read=1, write=0, create=0, delete=0):
     try:
+        if not frappe.db.exists("DocType", doctype) or not frappe.db.exists("Role", role):
+            print(f"Skipping permission grant for {doctype} -> {role} (DocType or Role missing)")
+            return
         has_perm = frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role})
         if has_perm:
             doc = frappe.get_doc("Custom DocPerm", has_perm)
@@ -124,11 +127,17 @@ for s in students:
             "enabled": 1,
             "send_welcome_email": 0
         })
-        user.insert(ignore_permissions=True)
+        try:
+            user.insert(ignore_permissions=True)
+        except Exception as u_err:
+            print(f"Warning inserting user {email}: {u_err}")
         
         # Add LMS student role if it exists
         if frappe.db.exists("Role", "LMS Student"):
-            user.add_roles("LMS Student")
+            try:
+                user.add_roles("LMS Student")
+            except Exception:
+                pass
     else:
         print(f"User {email} already exists.")
 
