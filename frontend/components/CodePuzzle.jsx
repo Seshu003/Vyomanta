@@ -15,7 +15,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { T } from '@/lib/lms-data';
-import CodeVisualizer3D from './CodeVisualizer3D';
+
 
 import { StateField, StateEffect } from "@codemirror/state";
 import { EditorView, Decoration, WidgetType } from "@codemirror/view";
@@ -300,7 +300,7 @@ export default function CodePuzzle() {
   const [isTracing, setIsTracing] = useState(false);
   const [traceError, setTraceError] = useState(null);
   const [playSpeed, setPlaySpeed] = useState(1500); // 1500ms, 1000ms, 500ms
-  const [visualizerMode, setVisualizerMode] = useState('2D'); // '2D' | '3D'
+
 
   // Terminal refs & resize layouts
   const terminalElRef = useRef(null);
@@ -387,6 +387,10 @@ export default function CodePuzzle() {
     }
   }, [currentStep, traceData, category]);
 
+  // Stdin line buffer for interactive input
+  const stdinLineRef = useRef('');
+  const waitingForInputRef = useRef(false);
+
   // Setup terminal (for programming mode)
   const initTerminal = () => {
     if (typeof window === 'undefined') return;
@@ -418,6 +422,32 @@ export default function CodePuzzle() {
       console.warn("Failed to open terminal:", e);
     }
 
+    // --- Intercept keystrokes for interactive stdin ---
+    term.onKey(({ key, domEvent }) => {
+      const code = domEvent.keyCode;
+      // Only process input when Python is waiting for it
+      if (!waitingForInputRef.current) return;
+
+      if (code === 13) {
+        // Enter: submit the buffered line
+        const line = stdinLineRef.current;
+        stdinLineRef.current = '';
+        waitingForInputRef.current = false;
+        term.write('\r\n');
+        sendStdinRef.current(line);
+      } else if (code === 8 || code === 127) {
+        // Backspace
+        if (stdinLineRef.current.length > 0) {
+          stdinLineRef.current = stdinLineRef.current.slice(0, -1);
+          term.write('\b \b');
+        }
+      } else if (key && key.length === 1) {
+        // Printable character
+        stdinLineRef.current += key;
+        term.write(key);
+      }
+    });
+
     const resizeObserver = new ResizeObserver(() => {
       if (terminalInstanceRef.current && fitAddonRef.current) {
         try {
@@ -444,6 +474,9 @@ export default function CodePuzzle() {
     }
   }, [category]);
 
+  // sendStdin ref — keeps a stable reference for the terminal's onKey handler
+  const sendStdinRef = useRef(null);
+
   // --- Pyodide WebWorker hooks ---
   const onStdout = (text) => {
     if (terminalInstanceRef.current) {
@@ -464,12 +497,16 @@ export default function CodePuzzle() {
   };
 
   const onFinish = () => {
+    waitingForInputRef.current = false;
+    stdinLineRef.current = '';
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.write('\n\x1b[90m--- Run finished ---\x1b[0m\n');
     }
   };
 
   const onError = (msg) => {
+    waitingForInputRef.current = false;
+    stdinLineRef.current = '';
     setIsTracing(false);
     if (terminalInstanceRef.current) {
       terminalInstanceRef.current.write(`\x1b[31mError: ${msg}\x1b[0m\n`);
@@ -488,14 +525,28 @@ export default function CodePuzzle() {
     setActiveRightTab('visualizer'); // Auto-switch to visualizer tab on success
   };
 
-  const { isReady, isRunning, runCode, runTrace, stopCode } = usePyodide({
+  const onStdinRequest = () => {
+    waitingForInputRef.current = true;
+    stdinLineRef.current = '';
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.write('\x1b[96m');
+    }
+  };
+
+  const { isReady, isRunning, runCode, runTrace, stopCode, sendStdin } = usePyodide({
     onStdout,
     onStderr,
     onReady,
     onFinish,
     onError,
-    onTraceResult
+    onTraceResult,
+    onStdinRequest
   });
+
+  // Keep sendStdin accessible inside terminal's onKey closure
+  useEffect(() => {
+    sendStdinRef.current = sendStdin;
+  }, [sendStdin]);
 
   // --- API validation call ---
   const validateStep = async (codeToCheck, targetIndex) => {
@@ -971,207 +1022,146 @@ export default function CodePuzzle() {
     };
   };
 
-  const render3DVisualizer = () => {
-    const details = getTraceStepDetails();
-    if (!details) return null;
-
-    const {
-      variables,
-      error,
-      line,
-      stdout,
-      listKey,
-      listVal,
-      scalarKeys,
-      dictKeys,
-      actionType,
-      swapMessage,
-      activeLineText,
-      lineActionType
-    } = details;
+  // ── 2D Visualizer ──────────────────────────────────────────────────────────
+  const render2DVisualizer = () => {
+    const stepData = traceData[currentStep];
+    if (!stepData) return null;
+    const { line, variables = {}, error } = stepData;
+    const keys = Object.keys(variables);
+    const prevStep = currentStep > 0 ? traceData[currentStep - 1] : null;
+    const prevVars = prevStep?.variables || {};
 
     if (error) {
       return (
-        <div style={{ color: '#F55B6B', background: 'rgba(245,91,107,0.08)', border: '1px solid rgba(245,91,107,0.3)', padding: 12, borderRadius: 8, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6, margin: 14 }}>
-          <strong style={{ display: 'block' }}>⚠️ Python Runtime Error</strong>
+        <div style={{ padding: '10px 12px', background: 'rgba(245,91,107,0.07)', border: '1px solid rgba(245,91,107,0.25)', borderRadius: 8, fontSize: 12, color: '#F55B6B', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <strong>⚠️ Runtime Error</strong>
           <span style={{ fontFamily: 'monospace' }}>{error}</span>
         </div>
       );
     }
 
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: 420, width: '100%', background: '#090d16', position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
-        
-        {/* Floating Code Line HUD */}
-        {activeLineText && (
-          <div style={{
-            position: 'absolute',
-            top: 12,
-            left: 12,
-            zIndex: 30,
-            background: 'rgba(10, 15, 30, 0.85)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 12,
-            padding: '10px 14px',
-            maxWidth: '60%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 9.5, color: '#8892B0', fontWeight: 800, letterSpacing: '0.05em' }}>LINE {line}</span>
-              <span style={{
-                fontSize: 9,
-                color: lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
-                       lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
-                       lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
-                       lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#F8FAFC',
-                background: lineActionType === 'VARIABLE ASSIGN' ? 'rgba(251, 191, 36, 0.15)' :
-                            lineActionType === 'LOOP EVALUATION' ? 'rgba(56, 189, 248, 0.15)' :
-                            lineActionType === 'BRANCH DECISION' ? 'rgba(167, 139, 250, 0.15)' :
-                            lineActionType === 'PRINT OUTPUT' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                padding: '2px 6px',
-                borderRadius: 5,
-                fontWeight: 800,
-                letterSpacing: '0.04em'
-              }}>
-                {lineActionType}
-              </span>
-            </div>
-            <div style={{
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: '#F8FAFC',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              padding: '6px 10px',
-              background: 'rgba(0, 0, 0, 0.4)',
-              borderRadius: 6,
-              borderLeft: `3px solid ${
-                lineActionType === 'VARIABLE ASSIGN' ? '#FBBF24' :
-                lineActionType === 'LOOP EVALUATION' ? '#38BDF8' :
-                lineActionType === 'BRANCH DECISION' ? '#A78BFA' :
-                lineActionType === 'PRINT OUTPUT' ? '#34D399' : '#6366F1'
-              }`
-            }}>
-              {activeLineText}
-            </div>
-            {swapMessage && (
-              <div style={{
-                fontSize: 10.5,
-                color: actionType === 'SWAP' ? '#F87171' : '#34D399',
-                fontWeight: 700,
-                fontFamily: 'monospace',
-                marginTop: 6,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}>
-                <span>⚡</span> {swapMessage}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 3D WebGL Scene */}
-        <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-          <CodeVisualizer3D
-            listKey={listKey}
-            listVal={listVal}
-            variables={variables}
-            prevVariables={currentStep > 0 ? traceData[currentStep - 1].variables : {}}
-            scalarKeys={scalarKeys}
-            dictKeys={dictKeys}
-            actionType={actionType}
-            swapMessage={swapMessage}
-            stdout={stdout}
-          />
-        </div>
-      </div>
-    );
-  };
-
-  // Render Visualizer Variables
-  const render2DVisualizer = () => {
-    const { line, variables } = traceData[currentStep];
-    const keys = Object.keys(variables || {});
-    const prevStep = currentStep > 0 ? traceData[currentStep - 1] : null;
-
-    // Code line inspector
+    // Code line analysis
     const lines = code.split('\n');
     const activeLineText = lines[line - 1]?.trim() || '';
+    let lineActionType = 'EXEC';
+    let lineColor = '#6366F1';
+    if (activeLineText.startsWith('for ') || activeLineText.startsWith('while ')) { lineActionType = 'LOOP'; lineColor = '#38BDF8'; }
+    else if (activeLineText.startsWith('if ') || activeLineText.startsWith('elif ') || activeLineText.startsWith('else:')) { lineActionType = 'BRANCH'; lineColor = '#A78BFA'; }
+    else if (activeLineText.includes('print(')) { lineActionType = 'PRINT'; lineColor = '#34D399'; }
+    else if (activeLineText.includes('=')) { lineActionType = 'ASSIGN'; lineColor = '#FBBF24'; }
+    else if (activeLineText.startsWith('def ')) { lineActionType = 'DEF'; lineColor = '#F472B6'; }
+    else if (activeLineText.startsWith('return ')) { lineActionType = 'RETURN'; lineColor = '#FB923C'; }
 
-    let lineActionType = "EXECUTE";
-    if (activeLineText.startsWith('for ') || activeLineText.startsWith('while ')) {
-      lineActionType = "LOOP";
-    } else if (activeLineText.startsWith('if ') || activeLineText.startsWith('elif ') || activeLineText.startsWith('else:')) {
-      lineActionType = "BRANCH";
-    } else if (activeLineText.includes('print(')) {
-      lineActionType = "PRINT";
-    } else if (activeLineText.includes('=')) {
-      lineActionType = "ASSIGN";
-    } else if (activeLineText.startsWith('def ')) {
-      lineActionType = "FUNCTION";
-    } else if (activeLineText.startsWith('return ')) {
-      lineActionType = "RETURN";
-    }
-
-    // List key extraction
+    // Categorize variables
     const listKey = keys.find(k => Array.isArray(variables[k]) && !k.startsWith('__'));
-    
-    // Scalar registers
     const scalarKeys = keys.filter(k => {
-      const val = variables[k];
-      return !Array.isArray(val) && (typeof val !== 'object' || val === null);
+      const v = variables[k];
+      return !k.startsWith('__') && !Array.isArray(v) && (typeof v !== 'object' || v === null);
     });
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Code line block */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 10, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 9.5, color: '#647298', fontWeight: 700, textTransform: 'uppercase' }}>Executing Line {line}</span>
-            <span style={{ fontSize: 8.5, color: '#F5A95B', background: 'rgba(245, 169, 91, 0.1)', padding: '1px 5px', borderRadius: 4, fontWeight: 800 }}>{lineActionType}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+        {/* ── Active Line HUD ── */}
+        <div style={{
+          display: 'flex', alignItems: 'stretch', gap: 0,
+          background: '#0b0d18', borderRadius: 7, overflow: 'hidden',
+          border: `1px solid ${lineColor}40`
+        }}>
+          {/* Line number gutter */}
+          <div style={{
+            padding: '7px 10px', background: `${lineColor}18`,
+            borderRight: `2px solid ${lineColor}`,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            minWidth: 44, flexShrink: 0
+          }}>
+            <span style={{ fontSize: 8, color: lineColor, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', opacity: 0.8 }}>{lineActionType}</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: lineColor, lineHeight: 1, fontFamily: 'monospace' }}>{line}</span>
           </div>
-          <div style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#E2E8F0', padding: '4px 8px', background: '#090A0F', borderRadius: 4, borderLeft: '3px solid #F5A95B', whiteSpace: 'pre' }}>
+          {/* Code text */}
+          <div style={{
+            flex: 1, padding: '7px 10px',
+            fontFamily: 'monospace', fontSize: 12.5, color: '#E2E8F0',
+            whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis',
+            display: 'flex', alignItems: 'center'
+          }}>
             {activeLineText || '# (empty line)'}
           </div>
         </div>
 
-        {/* Array visualizer */}
-        {listKey && renderArrayVisualizer(listKey, variables[listKey], variables, prevStep?.variables)}
+        {/* ── Array Visualizer ── */}
+        {listKey && renderArrayVisualizer(listKey, variables[listKey], variables, prevVars)}
 
-        {/* Registers */}
+        {/* ── Scalar Variables ── */}
         {scalarKeys.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 8 }}>
-            <div style={{ fontSize: 9, color: '#647298', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 4 }}>
-              Variables Stack
+          <div style={{
+            background: '#0b0d18', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 7, overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '5px 10px', background: 'rgba(255,255,255,0.03)',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', gap: 6
+            }}>
+              <span style={{ fontSize: 9, color: '#647298', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Variables</span>
+              <span style={{ fontSize: 9, color: '#3A4560', fontWeight: 600 }}>({scalarKeys.length})</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
-              {scalarKeys.map((key) => {
+            {/* Variable rows */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {scalarKeys.map((key, i) => {
                 const val = variables[key];
-                const prevVal = prevStep?.variables?.[key];
-                const isChanged = prevVal !== undefined && prevVal !== val;
+                const prevVal = prevVars[key];
+                const isNew = !(key in prevVars);
+                const isChanged = !isNew && prevVal !== undefined && prevVal !== val;
+                const displayVal = val === null ? 'None' : typeof val === 'boolean' ? (val ? 'True' : 'False') : String(val);
+                const typeLabel = Array.isArray(val) ? 'list' : val === null ? 'None' : typeof val === 'boolean' ? 'bool' : typeof val === 'number' ? (Number.isInteger(val) ? 'int' : 'float') : typeof val;
 
                 return (
                   <div
                     key={key}
                     style={{
-                      background: isChanged ? 'rgba(91, 140, 248, 0.08)' : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${isChanged ? 'rgba(91, 140, 248, 0.3)' : 'rgba(255,255,255,0.05)'}`,
-                      borderRadius: 6,
-                      padding: '4px 8px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      transition: 'all 0.2s'
+                      display: 'flex', alignItems: 'center',
+                      padding: '5px 10px',
+                      borderBottom: i < scalarKeys.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                      background: isNew ? 'rgba(52,211,153,0.05)' : isChanged ? 'rgba(91,140,248,0.07)' : 'transparent',
+                      transition: 'background 0.25s'
                     }}
                   >
-                    <span style={{ color: '#8892B0', fontWeight: 600 }}>{key}</span>
-                    <span style={{ color: isChanged ? '#5B8CF8' : '#F8FAFC', fontWeight: 700 }}>
-                      {val === null ? 'None' : typeof val === 'boolean' ? (val ? 'True' : 'False') : String(val)}
+                    {/* Changed indicator */}
+                    <div style={{
+                      width: 3, height: 16, borderRadius: 2, marginRight: 8, flexShrink: 0,
+                      background: isNew ? '#34D399' : isChanged ? '#5B8CF8' : 'transparent'
+                    }} />
+                    {/* Variable name */}
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#8892B0', fontWeight: 600, minWidth: 70, flexShrink: 0 }}>
+                      {key}
                     </span>
+                    {/* Type badge */}
+                    <span style={{
+                      fontSize: 9, color: '#4A5568', background: 'rgba(255,255,255,0.04)',
+                      padding: '1px 4px', borderRadius: 3, fontFamily: 'monospace', marginRight: 8, flexShrink: 0
+                    }}>
+                      {typeLabel}
+                    </span>
+                    {/* Value */}
+                    <span style={{
+                      fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700,
+                      color: isNew ? '#34D399' : isChanged ? '#5B8CF8' : '#F8FAFC',
+                      marginLeft: 'auto', textAlign: 'right',
+                      maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
+                      {displayVal}
+                    </span>
+                    {/* Old value (if changed) */}
+                    {isChanged && (
+                      <span style={{
+                        fontFamily: 'monospace', fontSize: 10, color: '#4A5568',
+                        marginLeft: 6, textDecoration: 'line-through', flexShrink: 0
+                      }}>
+                        {prevVal === null ? 'None' : String(prevVal)}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -1182,7 +1172,7 @@ export default function CodePuzzle() {
     );
   };
 
-  // Render Visualizer Variables
+  // Render Visualizer Variables (2D only)
   const renderVisualizerVariables = () => {
     if (traceError) {
       return (
@@ -1205,7 +1195,7 @@ export default function CodePuzzle() {
       );
     }
 
-    return visualizerMode === '3D' ? render3DVisualizer() : render2DVisualizer();
+    return render2DVisualizer();
   };
 
   return (
@@ -1967,49 +1957,7 @@ export default function CodePuzzle() {
                               {playSpeed === 1500 ? '1.0x' : playSpeed === 1000 ? '1.5x' : '2.0x'}
                             </button>
                             
-                            {/* 3D/2D Visualizer Mode Toggle */}
-                            <div style={{
-                              display: 'flex',
-                              background: 'rgba(255,255,255,0.06)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              borderRadius: 4,
-                              padding: 2,
-                              gap: 2,
-                              alignItems: 'center'
-                            }}>
-                              <button
-                                onClick={() => setVisualizerMode('3D')}
-                                style={{
-                                  background: visualizerMode === '3D' ? '#F5A95B' : 'transparent',
-                                  color: visualizerMode === '3D' ? '#000000' : '#8892B0',
-                                  border: 'none',
-                                  padding: '3px 8px',
-                                  borderRadius: 3,
-                                  fontSize: 9.5,
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s'
-                                }}
-                              >
-                                3D
-                              </button>
-                              <button
-                                onClick={() => setVisualizerMode('2D')}
-                                style={{
-                                  background: visualizerMode === '2D' ? '#F5A95B' : 'transparent',
-                                  color: visualizerMode === '2D' ? '#000000' : '#8892B0',
-                                  border: 'none',
-                                  padding: '3px 8px',
-                                  borderRadius: 3,
-                                  fontSize: 9.5,
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s'
-                                }}
-                              >
-                                2D
-                              </button>
-                            </div>
+
                             
                             <div style={{ display: 'flex', gap: 3 }}>
                               <button
